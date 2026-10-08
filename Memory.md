@@ -1,39 +1,33 @@
 # Project Memory
 
-> This file is intentionally lightweight at project start.
+> This file records the current verified state of the NoteFlow project.
 >
-> The coding agent should update it regularly as implementation progresses.
+> Update it after meaningful implementation milestones. Keep it concise and factual.
 
 ## 1. What Has Been Completed
 
-Record only work that is actually complete and verified.
-
-Use the assignment priority when tracking progress:
-
 ```text
-P0 — Core / Required
-- [x] Repository inspection (greenfield; docs only)
-- [~] Google OAuth (full flow + sessions built and tested with a Google test double;
-      NOT yet exercised against real Google — needs credentials in .env)
-- [x] Database schema (8 tables, SQL migration applied to dev + test DBs)
+- [x] Repository inspection and project foundation
+- [x] Phase 0 scaffold/tooling
+- [x] Phase 1 database schema and migrations
+- [x] Phase 1 authentication/session foundation
+- [x] Real Google OAuth login tested
+- [x] Logout tested
+- [x] Unauthenticated API rejection verified
+- [x] Per-user authorization foundations verified
+- [x] PostgreSQL development database running
+- [x] Gemini API key created and stored locally
+- [x] .env.example updated to Gemini configuration
 - [ ] Notes CRUD
-- [ ] AI extraction + structured validation
+- [ ] AI intent extraction
+- [ ] Structured AI validation
 - [ ] Todos
-- [ ] Reminders + in-app alerts
-- [ ] Ask AI + history
-- [ ] Error and edge-case handling
-
-P1 — Should Have
-- [ ] Timezone support
-- [ ] Duplicate prevention
+- [ ] Reminders
+- [ ] Ask AI
+- [ ] Timezone-aware AI extraction
+- [ ] Duplicate prevention/reconciliation
 - [ ] AI-created labels
-
-P2 — Bonus / Optional
-- [ ] Unclear reminder handling
-- [ ] Recurring reminders
-- [ ] Notify another user
-- [ ] Smarter Ask AI retrieval
-- [ ] Docker
+- [ ] Final security audit
 ```
 
 Only mark a feature complete after it is implemented, integrated, and verified.
@@ -45,137 +39,166 @@ Only mark a feature complete after it is implemented, integrated, and verified.
 ### Current Phase
 
 ```text
-Phase 1 complete (Foundation); next: Phase 2 — Notes
+Phase 2 — Notes CRUD
 ```
 
 ### Current Feature
 
 ```text
-None
+Notes
 ```
 
 ### Current File
 
 ```text
-None
+Backend/frontend notes modules — implementation not started
 ```
 
 ### Current Objective
 
 ```text
-Phase 2: Notes CRUD (backend ownership-scoped + frontend UI), no AI yet.
+Implement authenticated Notes CRUD using PostgreSQL, with notes owned by the signed-in Google user.
 ```
 
 ### Status
 
 ```text
-PHASE 1 VERIFIED — awaiting go-ahead for Phase 2
+READY FOR PHASE 2
 ```
+
+AI extraction is not implemented yet. It is planned for Phase 3 after the Notes CRUD foundation is complete.
 
 ---
 
 ## 3. Recently Completed
 
-Record the most recent completed work.
-
 ```text
-- Phase 0: git init, .gitignore (before any env file), .env.example (names only),
-  npm workspaces monorepo, strict TS, ESLint+Prettier, Vitest.
-- Backend foundation: Express 5 app factory, Zod env validation, AppError + error envelope,
-  JSON logger, GET /api/health. 6 tests.
-- Frontend foundation: Vite+React+TS, Router, TanStack Query provider, Design.md tokens
-  (light/dark), home page. 1 test.
-- docs/07_FINAL_REVIEW_CHECKLIST.md created; README with setup + env table.
-- Phase 1: Drizzle schema + SQL migration 0000_init (users, sessions, notes, todos, reminders,
-  ai_dismissed, ask_history, ask_history_sources); composite FK (source_note_id,user_id) ->
-  notes(id,user_id) so derived rows can never point at another user's note.
-- Sessions: 256-bit random token, only SHA-256 hash stored, httpOnly + SameSite=Lax cookie
-  (Secure in production), expiry enforced, logout deletes the row.
-- Google OAuth (openid-client): code flow + PKCE S256 + state + nonce + ID-token verification;
-  transient signed oauth cookie; upsert by google_sub; failures redirect to /login?error=<code>.
-- requireAuth, GET/PATCH /api/me (IANA timezone validated with Luxon), POST /api/auth/logout,
-  Origin check on state-changing requests, helmet.
-- Frontend: login page with error messages, RequireAuth, home with sign-out.
-- Test DB strategy: TEST_DATABASE_URL (*_test, must differ from DATABASE_URL), auto-created +
-  migrated in globalSetup, TRUNCATE CASCADE between tests, files serial.
-- Dev Postgres via docker-compose.dev.yml (container noteflow-dev-db).
+- Phase 0 repository/scaffold/tooling completed.
+- Phase 1 database schema and migrations completed.
+- Phase 1 authentication/session foundation completed.
+- Real Google OAuth login successfully tested against Google.
+- /api/me returned the authenticated Google user successfully.
+- Logout successfully invalidated the session.
+- /api/me returned 401 after logout.
+- PostgreSQL 16 development container is healthy.
+- Database migrations applied successfully.
+- Backend and frontend checks pass.
+- npm audit reports 0 vulnerabilities.
+- Gemini API key was created for the NoteFlow Google Cloud project.
+- The real Gemini key is stored only in the local .env and is not committed.
+- .env.example now uses GEMINI_API_KEY and GEMINI_MODEL.
 ```
 
 ---
 
 ## 4. Known Issues / Blockers
 
-Record real blockers only.
-
 ```text
-- None
+- None currently blocking Phase 2.
 ```
 
-Each blocker should include:
-
-- issue
-- affected feature
-- evidence/error
-- attempted fix
-- next action
+The Gemini API has not yet been integrated into application code. The provider abstraction and Gemini implementation are planned for the AI extraction phase.
 
 ---
 
 ## 5. Decisions Made
 
-Record important architectural or product decisions.
-
 ```text
-- Monorepo with npm workspaces; ESM everywhere; backend uses NodeNext (.js import suffixes).
-- Vitest 5 + react-router-dom 7 chosen so `npm audit` reports 0 vulnerabilities.
-- DATABASE_URL and SESSION_SECRET are required at boot; Google/Anthropic vars optional so the
-  app can report "not configured" to users instead of crashing.
-- Dev: Vite proxies /api to :3001 (same-origin cookies).
-- Phase order deviation planned: Phase 7 (timezone) built together with Phase 3 (extraction).
-- Dev DB: Postgres 16 in Docker (docker-compose.dev.yml); password from local .env only.
-- sessions.id = SHA-256(token). Unknown /api paths return 401 when signed out (no route leakage).
-- OAuth failures are redirects to {APP_BASE_URL}/login?error=<code>; codes: not_configured,
-  access_denied, invalid_state, login_failed, email_unverified.
-- Browser timezone passed as ?tz= at login; applied only when the user row is first created.
-- PATCH /me body is strict: unknown keys (e.g. user_id) -> 422.
-- Timezone validation: 'UTC' or Region/City that Luxon accepts (rejects 'EST', offsets).
-- ask_history.status enum: answered | no_info | failed.
-- drizzle-orm is also a root devDependency so drizzle-kit (hoisted) can resolve it;
-  root package.json `overrides` pins esbuild ^0.25 (clears a dev-tool advisory in drizzle-kit deps).
+- React + Vite + TypeScript is the frontend stack.
+- Node.js + Express + TypeScript is the backend stack.
+- PostgreSQL is the database.
+- Drizzle ORM is used for database access and migrations.
+- Google OAuth is the only authentication method required by the assignment.
+- Sessions are server-managed and authenticated requests derive the user from the session.
+- User-owned data must always be scoped by authenticated user ownership.
+- Gemini is the selected AI provider for this implementation.
+- The AI provider is accessed through an AIProvider abstraction and GeminiProvider implementation.
+- Gemini SDK calls must not be placed directly in business/domain logic.
+- GEMINI_API_KEY is backend-only.
+- GEMINI_MODEL is configured through environment variables.
+- Current configured model value is gemini-3.8-flash.
+- Structured AI output follows parse → schema validation → business validation → normalization → persistence.
+- AI output is never trusted as an authority for authentication, ownership, authorization, or source-note validity.
+- AI/provider failure must not cause a valid saved note to disappear.
+- Natural-language dates must be interpreted using the user's timezone.
+- PostgreSQL stores canonical timestamps.
+- Local Docker PostgreSQL is development infrastructure; using Docker locally does not by itself count as completing the assignment's optional Docker submission bonus.
+- The assignment source document must remain unchanged; implementation choices belong in project documentation.
 ```
-
-Examples:
-
-- selected AI provider
-- database strategy
-- authentication strategy
-- date/time storage convention
-- idempotency strategy
 
 ---
 
 ## 6. Tests / Verification
 
-Record the latest verification state.
+Latest verified Phase 1 state:
 
 ```text
-Frontend:
-- 9/9 tests pass
-
 Backend:
-- 74/74 tests pass (real Postgres test DB)
+- 74 tests passed
+
+Frontend:
+- 9 tests passed
 
 Typecheck:
-- Clean (both workspaces)
+- Passed
 
-Lint/format:
-- Clean
+Lint:
+- Passed
 
-Build:
-- Both workspaces build; built API boots and serves /api/health
+Formatting:
+- Passed
+
+Production build:
+- Passed
+
+Database migration:
+- Passed
+
+PostgreSQL smoke test:
+- Passed
+
+Google OAuth:
+- Real login passed
+- Authenticated /api/me passed
+- Logout passed
+- Unauthenticated /api/me returned 401
+
+Security checks:
+- Session cookie protections implemented
+- OAuth state/PKCE/nonce protections implemented
+- Protected API routes reject unauthenticated requests
+- Cross-user ownership constraints implemented
+
+Dependency audit:
+- 0 vulnerabilities
+
+Git:
+- Working tree was clean after the completed Phase 1 commits
 ```
 
-Update this after meaningful implementation milestones.
+The Gemini API key itself has not been pasted into source control or documentation.
+
+---
+
+## 7. Phase Order
+
+```text
+Phase 0 — Scaffold/tooling                         [x]
+Phase 1 — DB/auth foundation                       [x]
+Phase 2 — Notes CRUD                               [ ]
+Phase 3 — AI intent extraction                     [ ]
+Phase 4 — Todos                                    [ ]
+Phase 5 — Reminders                                [ ]
+Phase 6 — Ask AI                                   [ ]
+Phase 7 — Timezone support                         [ ]
+Phase 8 — Idempotency/reconciliation              [ ]
+Phase 9 — UX/design refinement                     [ ]
+Phase 10 — Security/reliability audit              [ ]
+Phase 11 — Test/build gate                         [ ]
+Phase 13 — Final submission review                 [ ]
+```
+
+Optional bonus work should only begin after all mandatory core and "Should have" requirements are stable.
 
 ---
 

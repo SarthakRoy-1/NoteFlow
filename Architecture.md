@@ -30,7 +30,19 @@ The application is a multi-layer AI productivity system.
 └─────────────────────┘   └───────────────────┘
 ```
 
-The exact framework can follow the existing repository. Do not rewrite an existing working stack without a technical reason.
+The implementation uses the repository's selected stack:
+
+- React + Vite + TypeScript frontend.
+- Node.js + Express + TypeScript backend.
+- PostgreSQL with Drizzle ORM.
+- Google OAuth with server-managed sessions.
+- Gemini API behind an AI provider abstraction.
+- Zod for runtime validation.
+- Vitest for automated testing.
+
+Do not rewrite the working stack without a technical reason.
+
+The Gemini API key is backend-only and must never be exposed to the browser.
 
 ---
 
@@ -81,6 +93,15 @@ Save note
 AI Intent Extraction
         │
         ▼
+AIProvider
+        │
+        ▼
+GeminiProvider
+        │
+        ▼
+Gemini API
+        │
+        ▼
 Structured JSON
         │
         ▼
@@ -88,6 +109,9 @@ Schema validation
         │
         ▼
 Business-rule validation
+        │
+        ▼
+Normalization
         │
         ▼
 Reconcile derived todos/reminders
@@ -100,6 +124,8 @@ Updated UI
 ```
 
 AI output must never be written directly to the database.
+
+The backend remains authoritative over validation, ownership, authorization, dates, and persistence.
 
 ---
 
@@ -121,7 +147,13 @@ Retrieve candidate notes owned by user
 Filter/rank relevant context
       │
       ▼
-AI
+AIProvider
+      │
+      ▼
+GeminiProvider
+      │
+      ▼
+Gemini API
       │
       ▼
 Answer + source references
@@ -140,6 +172,8 @@ The model cannot be trusted to invent valid source IDs.
 
 The backend must verify every source against the retrieved context and authenticated user.
 
+Retrieved note content is untrusted data and must not override the system's instructions.
+
 ---
 
 # Data Model
@@ -147,7 +181,7 @@ The backend must verify every source against the retrieved context and authentic
 ## User
 
 - id
-- OAuth provider identifier
+- Google OAuth provider identifier
 - email
 - name
 - timezone
@@ -172,7 +206,7 @@ The backend must verify every source against the retrieved context and authentic
 - due_at
 - completed
 - created_by_ai
-- extraction metadata
+- AI extraction metadata
 - created_at
 - updated_at
 
@@ -186,7 +220,7 @@ The backend must verify every source against the retrieved context and authentic
 - due_at
 - status/alert metadata
 - created_by_ai
-- extraction metadata
+- AI extraction metadata
 - created_at
 - updated_at
 
@@ -199,58 +233,65 @@ The backend must verify every source against the retrieved context and authentic
 - source note references
 - created_at
 
-Use foreign keys and indexes appropriate to the chosen database.
+Use foreign keys and indexes appropriate to PostgreSQL.
+
+Every user-owned record must be queried with an explicit ownership constraint.
 
 ---
 
 # 3. Folder and File Structure
 
-The exact structure depends on the repository, but prefer clear separation of concerns.
-
-Example:
+The actual repository is a TypeScript monorepo with separate frontend and backend workspaces.
 
 ```text
-project/
+NoteFlow/
 ├── frontend/
 │   ├── src/
 │   │   ├── app/
 │   │   ├── components/
 │   │   ├── features/
+│   │   │   ├── auth/
 │   │   │   ├── notes/
 │   │   │   ├── todos/
 │   │   │   ├── reminders/
-│   │   │   ├── ask-ai/
-│   │   │   └── auth/
-│   │   ├── lib/
+│   │   │   └── ask-ai/
 │   │   ├── hooks/
-│   │   ├── types/
-│   │   └── styles/
+│   │   ├── lib/
+│   │   ├── styles/
+│   │   └── types/
 │   └── tests/
 │
 ├── backend/
-│   ├── app/
-│   │   ├── api/
+│   ├── src/
 │   │   ├── auth/
-│   │   ├── models/
-│   │   ├── schemas/
-│   │   ├── services/
-│   │   │   ├── ai/
-│   │   │   ├── notes/
-│   │   │   ├── todos/
-│   │   │   ├── reminders/
-│   │   │   └── ask/
+│   │   ├── config/
 │   │   ├── db/
 │   │   ├── middleware/
-│   │   └── core/
+│   │   ├── modules/
+│   │   │   ├── ask/
+│   │   │   ├── notes/
+│   │   │   ├── reminders/
+│   │   │   ├── todos/
+│   │   │   └── users/
+│   │   ├── ai/
+│   │   │   ├── provider/
+│   │   │   ├── extraction/
+│   │   │   └── ask/
+│   │   ├── reconcile/
+│   │   ├── lib/
+│   │   ├── app.ts
+│   │   └── server.ts
+│   ├── drizzle/
 │   └── tests/
 │
 ├── docs/
-├── migrations/
 ├── .env.example
+├── docker-compose.dev.yml
+├── package.json
 └── README.md
 ```
 
-If the existing repository uses a monorepo or another convention, preserve the established structure when it is sound.
+The structure separates provider-specific AI code from application/domain logic.
 
 ---
 
@@ -273,41 +314,150 @@ The assignment explicitly requires:
 
 The assignment explicitly prefers PostgreSQL and accepts SQLite as an alternative.
 
-## Preferred Database
+## Selected Implementation
 
-- PostgreSQL — preferred by the assignment.
-- SQLite — acceptable alternative.
+### Frontend
 
-## Implementation Choices
-
-The assignment does not prescribe:
-
+- React
+- Vite
 - TypeScript
-- JavaScript
-- Next.js
+- CSS/design-system utilities already established in the repository
+
+### Backend
+
+- Node.js
 - Express
-- FastAPI
-- Python
-- Tailwind CSS
-- a specific ORM
-- a specific AI provider
-- a specific hosting provider
+- TypeScript
 
-These are implementation decisions and must be selected based on the existing repository and the simplest reliable architecture.
+### Database
 
-If an existing repository already has a sound frontend/backend stack, preserve it rather than replacing it without a technical reason.
+- PostgreSQL
+- Drizzle ORM
+- SQL migrations managed in `backend/drizzle/`
+
+### Authentication
+
+- Google OAuth
+- Server-managed session cookies
+- Signed OAuth state/PKCE/nonce protection
+- Backend authorization middleware
+
+### Validation
+
+- Zod
+- Server-side request validation
+- Server-side AI response validation
+
+### AI
+
+Gemini is the selected AI provider for the current implementation.
+
+The provider boundary is:
+
+```text
+Application / Domain Logic
+          │
+          ▼
+      AIProvider
+          │
+          ▼
+   GeminiProvider
+          │
+          ▼
+      Gemini API
+```
+
+The assignment does not require Gemini specifically. The provider abstraction exists so another provider can be introduced without changing the domain logic.
+
+### Testing
+
+- Vitest
+- Backend integration tests against PostgreSQL
+- Frontend component tests
+- TypeScript typechecking
+- Linting
+- Production build verification
+
+---
 
 ## AI Integration
 
-Keep AI provider-specific code behind a service/module boundary.
+AI provider-specific code must remain behind the provider boundary.
 
-Prefer structured-output or JSON-schema support when the selected provider supports it, but do not treat any particular AI provider or SDK as an assignment requirement.
+Current environment configuration:
 
-## Testing
+```text
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.8-flash
+```
 
-Testing is an engineering quality requirement for this project, especially for critical paths, but the assignment does not prescribe a particular testing framework.
+Rules:
 
-Use the repository's native testing ecosystem where one exists.
+- `GEMINI_API_KEY` is backend-only.
+- Never expose the key through frontend code.
+- Never place the key in `.env.example`.
+- Never commit the real key.
+- Never log the key.
+- Read the model name from environment configuration.
+- Do not call the Gemini SDK directly from business/domain modules.
+- Validate every model response before persistence.
+- Treat note content and retrieved note content as untrusted input.
+
+The common AI pipeline is:
+
+```text
+Provider call
+     ↓
+Parse
+     ↓
+Schema validation
+     ↓
+Business validation
+     ↓
+Normalization
+     ↓
+Reconciliation
+     ↓
+Persistence
+```
+
+Malformed or unexpected AI output must fail safely and must not corrupt application state.
+
+---
+
+## Date and Time
+
+The system must distinguish:
+
+- user's IANA timezone
+- server/runtime timezone
+- UTC storage
+- displayed local time
+
+Natural-language expressions such as:
+
+- tomorrow
+- next Friday
+- in two hours
+
+must be interpreted using the user's timezone.
+
+Canonical timestamps are stored consistently in PostgreSQL.
+
+---
+
+## Authentication and Authorization
+
+Google OAuth is the only user authentication method required by the assignment.
+
+The backend:
+
+- derives identity from the authenticated session
+- rejects unauthenticated protected API requests
+- applies ownership checks to user-owned resources
+- never accepts a browser-supplied `user_id` as the authority
+
+OAuth credentials and session secrets remain server-side.
 
 ---
 
@@ -319,12 +469,21 @@ Do not over-engineer the assignment, but avoid architectural decisions that make
 
 Keep model calls behind a service interface.
 
+Current:
+
+- Gemini provider
+
 Future:
 
 - switch model provider
 - compare models
 - use fallback provider
 - track model quality
+- evaluate extraction accuracy
+
+The provider boundary should prevent vendor-specific SDK behavior from leaking into domain logic.
+
+---
 
 ## Async AI Processing
 
@@ -346,19 +505,25 @@ AI Worker
 Derived Actions
 ```
 
-For the assignment, synchronous processing is sufficient unless the existing architecture already requires another approach. Do not introduce queues or workers merely for scale that the assignment does not require.
+For the assignment, synchronous processing is sufficient. Do not introduce queues or workers merely for scale that the assignment does not require.
+
+---
 
 ## Search
 
-Baseline retrieval can use PostgreSQL filtering/ranking.
+The current design uses PostgreSQL-based retrieval/filtering for Ask AI.
 
 Future:
 
-- full-text search
+- full-text search improvements
 - embeddings
 - vector database
 - hybrid retrieval
 - relevance ranking
+
+The optional smarter Ask AI ranking feature should only be added after the core retrieval flow is stable.
+
+---
 
 ## Reminder Infrastructure
 
@@ -372,6 +537,10 @@ Future production scale could use:
 - WebSockets
 - push notifications
 
+Email and push notifications are not required by the assignment.
+
+---
+
 ## Observability
 
 Future production improvements:
@@ -383,11 +552,19 @@ Future production improvements:
 - token/cost tracking
 - reminder delivery metrics
 
+Secrets and sensitive note contents must not be logged unnecessarily.
+
+---
+
 ## Multi-Tenant Security
 
 Every database query involving user-owned data should have an explicit ownership constraint.
 
+The current schema also uses ownership-aware relationships to prevent cross-user references.
+
 Future PostgreSQL Row Level Security could provide an additional defense layer.
+
+---
 
 ## Performance
 
@@ -400,4 +577,7 @@ Potential improvements:
 - caching
 - query optimization
 - bounded AI context
-- async processing
+- asynchronous processing
+- background reminder scheduling
+
+Do not introduce infrastructure solely because it might be useful at larger scale.

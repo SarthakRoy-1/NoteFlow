@@ -27,15 +27,16 @@ Before changing code:
 2. Read `Architecture.md`.
 3. Read `Phases.md`.
 4. Read `Design.md`.
-5. Inspect the complete repository.
-6. Identify the existing frontend/backend/database/auth setup.
-7. Inspect package manifests.
-8. Inspect environment configuration.
-9. Inspect existing tests.
-10. Check the current Git status.
-11. Run the existing test/build/typecheck commands before making changes where practical.
-12. Identify what already works.
-13. Do not rewrite working functionality without evidence.
+5. Read `Memory.md`.
+6. Inspect the complete repository.
+7. Identify the existing frontend/backend/database/auth setup.
+8. Inspect package manifests.
+9. Inspect environment configuration.
+10. Inspect existing tests.
+11. Check the current Git status.
+12. Run the existing test/build/typecheck commands before making changes where practical.
+13. Identify what already works.
+14. Do not rewrite working functionality without evidence.
 
 Maintain backward compatibility with working features unless a requirement explicitly requires a change.
 
@@ -60,37 +61,78 @@ Assignment requirements/preferences:
 
 The assignment does not require a particular language, backend framework, styling framework, ORM, AI provider, or deployment platform.
 
-For implementation:
+For this repository, the selected implementation stack is:
 
-- Inspect the existing repository before choosing or changing frameworks.
-- Preserve a working stack unless there is a technical reason to change it.
-- Use the repository's established language and framework where appropriate.
-- Use strict typing when the chosen language/framework supports it.
-- Use automated tests for critical paths.
-- Use environment variables for secrets.
-- Prefer existing project utilities before introducing new dependencies.
+- React + Vite + TypeScript.
+- Node.js + Express + TypeScript.
+- PostgreSQL + Drizzle ORM.
+- Google OAuth with server-managed sessions.
+- Zod for runtime validation.
+- Vitest for testing.
+- Gemini as the current AI provider behind an `AIProvider` abstraction.
 
-## AI Libraries
+The Gemini choice is an implementation decision, not an assignment requirement.
 
-Use the AI provider SDK already established by the project where possible.
+Preserve the working stack unless there is a technical reason to change it.
 
-If adding an AI SDK:
+Use strict typing.
 
-- isolate it behind a service/module
+Use automated tests for critical paths.
+
+Use environment variables for secrets.
+
+Prefer existing project utilities before introducing new dependencies.
+
+---
+
+# AI Libraries
+
+Gemini is the selected AI provider for this project.
+
+The expected dependency boundary is:
+
+```text
+Application / Domain Logic
+          │
+          ▼
+      AIProvider
+          │
+          ▼
+   GeminiProvider
+          │
+          ▼
+      Gemini API
+```
+
+If adding or changing the AI SDK:
+
+- isolate it behind the AI provider module
 - pin or appropriately constrain versions
-- keep provider-specific code out of business logic
+- keep Gemini-specific code out of business logic
 - validate every response
+- do not expose the Gemini key to the frontend
+- read the model name from environment configuration
 
-Useful categories:
+Current environment variables:
 
-- structured-output / JSON-schema validation
-- date/time handling
-- database ORM/query tooling
-- authentication/session handling
-- test framework
-- API client/server utilities
+```text
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.8-flash
+```
 
-Do not add a library merely because it is fashionable.
+The real `GEMINI_API_KEY` belongs only in the local/deployment secret environment.
+
+Never place it in:
+
+- source code
+- frontend code
+- `.env.example`
+- Git
+- logs
+- prompts
+- client-visible responses
+
+The assignment does not require Gemini specifically. The provider abstraction must remain replaceable.
 
 ---
 
@@ -118,6 +160,10 @@ The AI may NOT:
 - invent a due time when the product rules do not permit guessing
 
 The backend is authoritative.
+
+Note content is untrusted data.
+
+Retrieved notes supplied to Ask AI are also untrusted data.
 
 ---
 
@@ -147,6 +193,8 @@ Invalid output:
 
 If supported, prefer provider-native structured outputs over manually parsing arbitrary prose.
 
+The provider adapter may handle Gemini-specific response parsing, but the resulting domain object must still pass the same backend validation pipeline.
+
 ---
 
 # Date/Time Boundary
@@ -171,6 +219,8 @@ Never hardcode:
 
 Tests must use controlled clocks/reference times.
 
+The backend must not blindly trust a timestamp produced by the model.
+
 ---
 
 # Error Handling
@@ -183,7 +233,7 @@ Handle:
 - session failure
 - database failure
 - AI timeout
-- AI provider error
+- Gemini provider error
 - malformed AI response
 - missing API key
 - invalid request
@@ -210,6 +260,8 @@ catch (error) {
 
 Do not silently swallow failures.
 
+An AI failure must not cause an otherwise valid saved note to disappear.
+
 ---
 
 # Security and Best Practices
@@ -217,6 +269,10 @@ Do not silently swallow failures.
 ## Authentication
 
 Authentication establishes identity.
+
+Google OAuth is the required authentication mechanism.
+
+Do not introduce a separate email/password authentication flow unless the assignment is explicitly changed.
 
 ## Authorization
 
@@ -252,6 +308,8 @@ ownership check
 allow/reject
 ```
 
+Every notes/todos/reminders/Ask AI query must be scoped to the authenticated user.
+
 ## AI Prompt Injection
 
 Note content is untrusted data.
@@ -266,6 +324,8 @@ Do not let note content become higher-priority instructions.
 
 The same rule applies to Ask AI retrieved notes.
 
+Never allow retrieved note text to redefine system instructions, authorization rules, or tool permissions.
+
 ## Secrets
 
 Never commit:
@@ -276,9 +336,11 @@ Never commit:
 - session secrets
 - provider credentials
 
-Use `.env`.
+Use `.env` for local secrets.
 
 Provide `.env.example` with variable names only.
+
+The Gemini API key must remain backend-only.
 
 ## Input Validation
 
@@ -304,6 +366,7 @@ Do not log:
 - OAuth secrets
 - API keys
 - full sensitive user data
+- raw provider credentials
 
 ---
 
@@ -330,6 +393,8 @@ Avoid:
 - premature queues
 - overengineering bonus features before core completion
 - replacing working code without understanding it
+- calling the Gemini SDK directly from unrelated business modules
+- exposing the Gemini API key through the frontend
 
 Do not optimize for code volume.
 
@@ -342,18 +407,43 @@ Optimize for correctness.
 When implementing a feature:
 
 1. Understand the requirement.
-2. Inspect existing related code.
-3. Define the data/API contract.
-4. Implement backend behavior.
-5. Implement frontend behavior.
-6. Add validation.
-7. Add tests.
-8. Run tests.
-9. Review security.
-10. Review UX.
-11. Update documentation if needed.
+2. Read `Memory.md` for current project state.
+3. Inspect existing related code.
+4. Define the data/API contract.
+5. Implement backend behavior.
+6. Implement frontend behavior.
+7. Add validation.
+8. Add tests.
+9. Run tests.
+10. Review security.
+11. Review UX.
+12. Update `Memory.md` if the phase/state changed.
+13. Update other documentation if needed.
 
 Do not jump between unrelated features unless necessary.
+
+Do not implement bonus features while mandatory core work remains incomplete unless explicitly instructed.
+
+---
+
+# Current AI Implementation Rules
+
+When implementing AI extraction or Ask AI:
+
+1. Use the `AIProvider` abstraction.
+2. Use `GeminiProvider` for the current implementation.
+3. Keep the Gemini SDK confined to the provider implementation.
+4. Keep prompts and output schemas in dedicated AI modules.
+5. Treat all note content as untrusted input.
+6. Require structured output.
+7. Parse the provider response safely.
+8. Validate it with Zod.
+9. Apply business-rule validation.
+10. Normalize dates/times using the user's timezone.
+11. Reconcile derived records before persistence.
+12. Never trust AI-provided user IDs or source ownership.
+13. Fail safely on malformed output or provider errors.
+14. Never expose provider credentials to the client.
 
 ---
 
@@ -466,3 +556,22 @@ A feature is complete only after:
 - no mandatory acceptance criterion is broken
 
 Before final submission, use `07_FINAL_REVIEW_CHECKLIST.md` or its equivalent project checklist and verify every mandatory item.
+
+---
+
+# Documentation Discipline
+
+Keep project documentation synchronized with the actual implementation.
+
+When a provider changes:
+
+- update `Architecture.md`
+- update `Agents.md`
+- update `Memory.md`
+- update `.env.example` if configuration names change
+- update `README.md` if setup instructions are provider-specific
+
+Do not modify the assignment source document to fit implementation choices.
+
+The assignment remains the product requirement; project documentation records the implementation.
+
