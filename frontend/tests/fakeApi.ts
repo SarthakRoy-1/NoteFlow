@@ -16,6 +16,33 @@ export interface FakeNote {
   analysis: FakeAnalysis;
 }
 
+export interface FakeTodo {
+  id: string;
+  title: string;
+  completed: boolean;
+  completedAt: string | null;
+  dueAt: string | null;
+  dueHasTime: boolean;
+  createdByAi: boolean;
+  createdAt: string;
+  updatedAt: string;
+  sourceNote: { id: string; title: string };
+}
+
+export interface FakeReminder {
+  id: string;
+  text: string;
+  person: string | null;
+  dueAt: string | null;
+  dueHasTime: boolean;
+  status: 'pending' | 'acknowledged' | 'dismissed';
+  acknowledgedAt: string | null;
+  createdByAi: boolean;
+  createdAt: string;
+  updatedAt: string;
+  sourceNote: { id: string; title: string };
+}
+
 export const testUser = {
   id: 'u1',
   email: 'pat@example.com',
@@ -35,6 +62,8 @@ export const apiError = (status: number, code: string, message: string) =>
  */
 export class FakeApi {
   notes: FakeNote[] = [];
+  todos: FakeTodo[] = [];
+  reminders: FakeReminder[] = [];
   /** What a successful retry produces. */
   analysisAfterRetry: FakeAnalysis = { status: 'ok', error: null, todos: 1, reminders: 0 };
   /** Analysis attached to notes created through the UI. */
@@ -50,6 +79,47 @@ export class FakeApi {
   constructor(initial: Partial<FakeNote>[] = []) {
     initial.forEach((n) => this.add(n));
     this.install();
+  }
+
+  addReminder(partial: Partial<FakeReminder> = {}): FakeReminder {
+    this.counter += 1;
+    const stamp = new Date((this.clock += 60_000)).toISOString();
+    const reminder: FakeReminder = {
+      id: `20000000-0000-4000-8000-${String(this.counter).padStart(12, '0')}`,
+      text: `Reminder ${this.counter}`,
+      person: null,
+      dueAt: null,
+      dueHasTime: true,
+      status: 'pending',
+      acknowledgedAt: null,
+      createdByAi: true,
+      createdAt: stamp,
+      updatedAt: stamp,
+      sourceNote: { id: '00000000-0000-4000-8000-0000000000aa', title: 'Source note' },
+      ...partial,
+    };
+    this.reminders.push(reminder);
+    return reminder;
+  }
+
+  addTodo(partial: Partial<FakeTodo> = {}): FakeTodo {
+    this.counter += 1;
+    const stamp = new Date((this.clock += 60_000)).toISOString();
+    const todo: FakeTodo = {
+      id: `10000000-0000-4000-8000-${String(this.counter).padStart(12, '0')}`,
+      title: `Todo ${this.counter}`,
+      completed: false,
+      completedAt: null,
+      dueAt: null,
+      dueHasTime: false,
+      createdByAi: true,
+      createdAt: stamp,
+      updatedAt: stamp,
+      sourceNote: { id: '00000000-0000-4000-8000-0000000000aa', title: 'Source note' },
+      ...partial,
+    };
+    this.todos.push(todo);
+    return todo;
   }
 
   add(partial: Partial<FakeNote> = {}): FakeNote {
@@ -136,6 +206,82 @@ export class FakeApi {
         analysis: this.analysisOnCreate,
       });
       return json({ note }, 201);
+    }
+    if (url === '/api/reminders/due' && method === 'GET') {
+      const now = Date.now();
+      const pending = this.reminders.filter((r) => r.status === 'pending' && r.dueAt);
+      const due = pending
+        .filter((r) => new Date(r.dueAt as string).getTime() <= now)
+        .sort((a, b) => (a.dueAt as string).localeCompare(b.dueAt as string));
+      const future = pending
+        .filter((r) => new Date(r.dueAt as string).getTime() > now)
+        .map((r) => r.dueAt as string)
+        .sort();
+      return json({ reminders: due, nextDueAt: future[0] ?? null });
+    }
+    if (url === '/api/reminders' && method === 'GET') {
+      const rank = (r: FakeReminder) => (r.status === 'pending' ? 0 : 1);
+      const sorted = [...this.reminders].sort(
+        (a, b) => rank(a) - rank(b) || (a.dueAt ?? '9999').localeCompare(b.dueAt ?? '9999'),
+      );
+      return json({ reminders: sorted });
+    }
+    const reminderMatch = /^\/api\/reminders\/([^/]+)$/.exec(url);
+    if (reminderMatch) {
+      const reminder = this.reminders.find((r) => r.id === reminderMatch[1]);
+      if (!reminder) return apiError(404, 'NOT_FOUND', 'We could not find that reminder.');
+      if (method === 'GET') return json({ reminder });
+      if (method === 'PATCH') {
+        if (body.text !== undefined) reminder.text = body.text;
+        if (body.person !== undefined) reminder.person = body.person?.trim() || null;
+        if (body.due !== undefined) {
+          reminder.dueAt = body.due ? `${body.due.date}T${body.due.time ?? '00:00'}:00.000Z` : null;
+          reminder.dueHasTime = Boolean(body.due?.time);
+          reminder.status = 'pending';
+          reminder.acknowledgedAt = null;
+        }
+        if (body.acknowledged !== undefined) {
+          reminder.status = body.acknowledged ? 'acknowledged' : 'pending';
+          reminder.acknowledgedAt = body.acknowledged ? new Date().toISOString() : null;
+        }
+        return json({ reminder });
+      }
+      if (method === 'DELETE') {
+        this.reminders = this.reminders.filter((r) => r.id !== reminder.id);
+        return new Response(null, { status: 204 });
+      }
+    }
+    if (url === '/api/todos' && method === 'GET') {
+      const sorted = [...this.todos].sort(
+        (a, b) =>
+          Number(a.completed) - Number(b.completed) ||
+          (a.dueAt ?? '9999').localeCompare(b.dueAt ?? '9999'),
+      );
+      return json({ todos: sorted });
+    }
+    const todoMatch = /^\/api\/todos\/([^/]+)$/.exec(url);
+    if (todoMatch) {
+      const todo = this.todos.find((t) => t.id === todoMatch[1]);
+      if (!todo) return apiError(404, 'NOT_FOUND', 'We could not find that todo.');
+      if (method === 'GET') return json({ todo });
+      if (method === 'PATCH') {
+        if (body.title !== undefined) todo.title = body.title;
+        if (body.completed !== undefined) {
+          todo.completed = body.completed;
+          todo.completedAt = body.completed ? new Date().toISOString() : null;
+        }
+        if (body.due !== undefined) {
+          todo.dueAt = body.due
+            ? `${body.due.date}T${body.due.time ?? '23:59:59.999'}Z`.replace('ZZ', 'Z')
+            : null;
+          todo.dueHasTime = Boolean(body.due?.time);
+        }
+        return json({ todo });
+      }
+      if (method === 'DELETE') {
+        this.todos = this.todos.filter((t) => t.id !== todo.id);
+        return new Response(null, { status: 204 });
+      }
     }
     const analyze = /^\/api\/notes\/([^/]+)\/analyze$/.exec(url);
     if (analyze && method === 'POST') {

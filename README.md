@@ -3,8 +3,8 @@
 AI notes, todos and reminders. Write notes in plain language; an AI model extracts todos and
 reminders, and you can ask questions about your notes. Sign-in is Google OAuth only.
 
-**Status:** Phases 0-3 complete (foundation, auth, notes CRUD, AI intent extraction). Todos and
-reminders screens, Ask AI and the rest arrive in later phases (see `Phases.md`; progress in
+**Status:** Phases 0-5 done (foundation, auth, notes CRUD, AI intent extraction, todos, reminders). Phase 3's live
+Gemini check is still pending (see `Memory.md`). Ask AI and the rest arrive in later phases (see `Phases.md`; progress in
 `Memory.md`).
 
 ## Stack
@@ -142,6 +142,15 @@ AI or creates duplicates. Tests never call Gemini; they use a scripted fake prov
 `npm run ai:smoke -w backend` (2 requests; add `-- --all` for 5). The Gemini free tier allows only
 20 requests per day per model, so use it sparingly.
 
+## Reminder alerts
+
+There is no email or push. While the app is open, a banner (plus a count badge on the Reminders link)
+lists every reminder that is **pending and whose time has arrived**. The server decides using its
+clock; the browser re-checks every 30 seconds, when the tab regains focus, and at the exact moment
+the next reminder is due. The alert stays until you press **Got it**, so a reload or a second tab
+shows the same alerts. A reminder with no time never alerts. A date-only reminder ("tomorrow")
+alerts from the start of that day in your timezone; no clock time is invented for it.
+
 ## API
 
 | Method | Path                           | Auth | Notes                                              |
@@ -158,6 +167,15 @@ AI or creates duplicates. Tests never call Gemini; they use a scripted fake prov
 | PATCH  | `/api/notes/:id`               | yes  | edit; re-analyses only if the text changed         |
 | POST   | `/api/notes/:id/analyze`       | yes  | retry a failed/pending analysis                    |
 | DELETE | `/api/notes/:id`               | yes  | delete the note and what was derived from it       |
+| GET    | `/api/todos`                   | yes  | your todos, open first then by due date; each has its `sourceNote` (`?status=open\|done\|all`) |
+| GET    | `/api/todos/:id`               | yes  | one todo                                           |
+| PATCH  | `/api/todos/:id`               | yes  | `{ title?, completed?, due? }`; `due` is `{ date, time? }` in your timezone or `null`; other fields are rejected |
+| DELETE | `/api/todos/:id`               | yes  | delete a todo (an AI-created one will not come back on re-analysis) |
+| GET    | `/api/reminders`               | yes  | your reminders: pending first, soonest due first, undated last; each has its `sourceNote` |
+| GET    | `/api/reminders/due`           | yes  | reminders whose time has arrived (pending, `dueAt <= now`) plus `nextDueAt`; drives the in-app alert banner |
+| GET    | `/api/reminders/:id`           | yes  | one reminder                                       |
+| PATCH  | `/api/reminders/:id`           | yes  | `{ text?, person?, due?, acknowledged? }`; `due` is `{ date, time? }` in your timezone or `null`; other fields are rejected |
+| DELETE | `/api/reminders/:id`           | yes  | delete a reminder (an AI-created one will not come back on re-analysis) |
 
 Errors always use `{ "error": { "code", "message" } }`. Every other `/api` route requires a session.
 

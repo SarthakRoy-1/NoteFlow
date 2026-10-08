@@ -4,6 +4,8 @@ import { RequireAuth } from '../features/auth/RequireAuth';
 import { NewNote } from '../features/notes/NewNote';
 import { NoteDetailRoute } from '../features/notes/NoteDetail';
 import { NoNoteSelected, NotesPage } from '../features/notes/NotesPage';
+import { RemindersPage } from '../features/reminders/RemindersPage';
+import { TodosPage } from '../features/todos/TodosPage';
 import { AppShell } from './AppShell';
 
 export function App() {
@@ -23,6 +25,8 @@ export function App() {
           <Route path="new" element={<NewNote />} />
           <Route path=":id" element={<NoteDetailRoute />} />
         </Route>
+        <Route path="/todos" element={<TodosPage />} />
+        <Route path="/reminders" element={<RemindersPage />} />
         <Route path="*" element={<Navigate to="/notes" replace />} />
       </Route>
     </Routes>

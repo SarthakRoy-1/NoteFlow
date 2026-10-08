@@ -1,10 +1,12 @@
-import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useLogout, useMe } from '../features/auth/useAuth';
+import { DueAlerts, useDueCount } from '../features/reminders/DueAlerts';
 
 export function AppShell() {
   const { data: user } = useMe();
   const logout = useLogout();
   const navigate = useNavigate();
+  const dueCount = useDueCount();
 
   const signOut = () =>
     logout.mutate(undefined, { onSuccess: () => navigate('/login', { replace: true }) });
@@ -15,6 +17,18 @@ export function AppShell() {
         <Link to="/notes" className="brand">
           NoteFlow
         </Link>
+        <nav className="shell-nav" aria-label="Main">
+          <NavLink to="/notes">Notes</NavLink>
+          <NavLink to="/todos">Todos</NavLink>
+          <NavLink to="/reminders">
+            Reminders
+            {dueCount > 0 && (
+              <span className="nav-badge" aria-label={`${dueCount} due`}>
+                {dueCount}
+              </span>
+            )}
+          </NavLink>
+        </nav>
         <div className="shell-user">
           <span className="muted" title={user?.email}>
             {user?.name}
@@ -29,6 +43,7 @@ export function AppShell() {
           Could not sign out. Please try again.
         </p>
       )}
+      <DueAlerts />
       <main className="shell-main">
         <Outlet />
       </main>

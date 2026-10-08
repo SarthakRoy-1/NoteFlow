@@ -22,12 +22,12 @@
 - [~] AI intent extraction (implemented + fully tested with a fake provider; a SUCCESSFUL live Gemini
       extraction has NOT been verified yet - see Known Issues)
 - [x] Structured AI validation (parse -> Zod -> business rules -> normalize; tested)
-- [ ] Todos
-- [ ] Reminders
+- [x] Todos (API + UI, verified incl. live smoke; no Gemini used)
+- [x] Reminders (API + UI + in-app alerts, verified incl. live smoke; no Gemini used)
 - [ ] Ask AI
 - [x] Timezone-aware AI extraction (backend resolves dates in the user's IANA tz; tested)
 - [~] Duplicate prevention/reconciliation (fingerprint + reconcile in place and tested; Phase 8 adds edit-flow UI cases)
-- [ ] AI-created labels
+- [x] AI-created labels (shown on todos and reminders)
 - [ ] Final security audit
 ```
 
@@ -40,13 +40,13 @@ Only mark a feature complete after it is implemented, integrated, and verified.
 ### Current Phase
 
 ```text
-Phase 3 implemented; awaiting one live Gemini success check before it is called complete
+Phase 5 (Reminders) implemented and verified; Phase 3 live Gemini success check still pending quota reset
 ```
 
 ### Current Feature
 
 ```text
-AI intent extraction (live verification)
+None (between phases)
 ```
 
 ### Current File
@@ -58,13 +58,13 @@ None
 ### Current Objective
 
 ```text
-Confirm a successful real Gemini extraction (quota was exhausted while debugging), then commit Phase 3.
+After the Gemini daily quota resets (~00:00 UTC) run `npm run ai:smoke -w backend` to close out Phase 3. Phase 4 + Phase 5 changes are uncommitted until reviewed.
 ```
 
 ### Status
 
 ```text
-PHASE 3: CODE + AUTOMATED CHECKS PASS; LIVE GEMINI SUCCESS NOT YET VERIFIED
+PHASE 4 + 5 VERIFIED (uncommitted); PHASE 3 LIVE GEMINI SUCCESS STILL PENDING
 ```
 
 Saving a note now stores it, then runs AI extraction; notes.analysis_status is pending|ok|failed.
@@ -101,6 +101,31 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
 - Env schema now reads GEMINI_API_KEY/GEMINI_MODEL (ANTHROPIC_* removed). Migration 0001 adds
   reminders.due_has_time (date-only reminders). Removed implicit $onUpdate on updated_at.
 - Notes UI: AI analysis panel (counts / failure message / Retry analysis). POST /api/notes/:id/analyze.
+- Phase 4 Todos: GET /api/todos (?status=open|done|all; open first, due asc, undated last; each row has
+  sourceNote {id,title} via an ownership-scoped join), GET/PATCH/DELETE /api/todos/:id. No POST (todos
+  come from AI extraction). No migration needed (todos schema already had completed/completed_at/
+  user_modified; source_note_id is NOT NULL + cascade, so a todo always has its note).
+  PATCH body is strict {title?, completed?, due?}; `due` = {date, time?} in the USER's timezone (server
+  converts) or null. Editing text/due sets user_modified; toggling completion does not. DELETE of an
+  AI-created todo writes an ai_dismissed tombstone (so it never returns on re-analysis).
+  UI: /todos page (nav link in the shell), checkbox, inline edit (text + date + optional time, sends only
+  changed fields), two-step delete, All/Open/Completed filter, AI-created badge, "From note: <title>" link,
+  Overdue flag, date-only dues shown as a date with no time. Deleting a todo also refreshes note counts.
+- Phase 5 Reminders (no migration: reminders already had status/alerted_at/due_has_time):
+  GET /api/reminders (pending first, due asc, undated last, handled last; each with sourceNote),
+  GET /api/reminders/due -> {reminders, nextDueAt} (pending AND due_at <= server now; never undated),
+  GET/PATCH/DELETE /api/reminders/:id. No POST (AI-created, like todos).
+  PATCH body strict {text?, person?, due?, acknowledged?}; blank person -> null; `due` = {date,time?} in the
+  USER's tz (date-only = START of the local day, no time invented) or null; acknowledged true -> status
+  'acknowledged' + alerted_at=now, false -> pending. Editing text/person/due sets user_modified; a changed
+  due re-arms the alert (back to pending). DELETE of an AI-created reminder writes an ai_dismissed tombstone.
+  Shared backend/src/lib/dueInput.ts now backs todo and reminder due parsing (Luxon, DST-aware);
+  frontend components/DueFields.tsx is shared by both edit forms (clearing the date also clears the time).
+  In-app alerts: DueAlerts banner + nav badge in the shell on EVERY page, fed by /reminders/due; polled
+  every 30s, on tab focus, and via a timer at nextDueAt (+0.5s). Stays until "Got it", so reloads and
+  second tabs show the same alerts (no repeated pop-ups). Fetch errors are silent. "Person" is
+  informational only; nobody is notified. /reminders page groups: Due now / Upcoming / No time set /
+  Acknowledged, with edit, delete (two-step), Got it / Re-open, source-note link.
 - Live smoke (temp users, since deleted): HTTP CRUD, cross-user 404s, and UI create/edit/delete
   in the browser pane all worked.
 ```
@@ -117,6 +142,15 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
   Failure paths were verified live (503/429 -> note saved, clear message, nothing stored).
   Next action: after the quota resets run `npm run ai:smoke -w backend` (2 requests; `-- --all` = 5)
   and confirm valid items; if it still 400s, bisect the schema (enum / type arrays) ONE request at a time.
+- Phase 4 limitation: todo due dates edited by the user are interpreted in the account timezone (PATCH /me);
+  there is no timezone picker UI yet (Phase 7/9). Date-only reminders are not shown anywhere yet.
+- Phase 5 live smoke (temp rows, since deleted; no notes created, no Gemini): API 401/404/422/403 cases,
+  banner + badge on the Notes page, date-only alert without a time, acknowledge persisted across reload,
+  edit (person/due), delete + tombstone, and an alert appearing by itself 0.5s after its due time with
+  no page reload.
+- Phase 5 limitations: alerts only show while the app is open (no email/push by design); the Reminders
+  link badge/banner depend on the 30s poll if the timer is throttled in a background tab; a date-only
+  reminder alerts from the start of its day; manual due edits use the account timezone (no picker yet).
 - Gemini free tier allows only 20 requests/day/model. Every note save and Ask AI question costs one, so
   demos/tests of the real app can exhaust it. Consider a billed key or a second model for later phases.
   429s are no longer retried (a retry only burns quota); daily-quota 429s show a distinct message.
@@ -176,15 +210,15 @@ The Gemini API has not yet been integrated into application code. The provider a
 
 ## 6. Tests / Verification
 
-Latest verified state (end of Phase 2):
+Latest verified state (end of Phase 5):
 
 ```text
 Backend:
-- 259 tests passed (117 earlier + 142 new: provider, schema/dates, extractor, fingerprint, DB analysis)
-- Mutation spot-checks: removing evidence grounding, the stale-analysis guard, or the time-guess guard each makes tests fail
+- 408 tests passed (327 earlier + 81 reminders API tests)
+- Mutation spot-checks: removing evidence grounding, the stale-analysis guard, the time-guess guard, todo ownership scoping, the delete tombstone, strict() on PATCH, reminder ownership scoping, or the due query's status/user filters each makes tests fail
 
 Frontend:
-- 44 tests passed (31 earlier + 13 analysis panel)
+- 122 tests passed (80 earlier + 42 reminders UI + alerts)
 
 Typecheck:
 - Passed
@@ -234,8 +268,8 @@ Phase 0 — Scaffold/tooling                         [x]
 Phase 1 — DB/auth foundation                       [x]
 Phase 2 — Notes CRUD                               [x]
 Phase 3 — AI intent extraction                     [~] code done, live Gemini success unverified
-Phase 4 — Todos                                    [ ]
-Phase 5 — Reminders                                [ ]
+Phase 4 — Todos                                    [x] (uncommitted)
+Phase 5 — Reminders                                [x] (uncommitted)
 Phase 6 — Ask AI                                   [ ]
 Phase 7 — Timezone support                         [ ]
 Phase 8 — Idempotency/reconciliation              [ ]

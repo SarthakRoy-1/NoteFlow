@@ -10,6 +10,8 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { originCheck } from './middleware/originCheck.js';
 import { requireAuth } from './middleware/requireAuth.js';
 import { notesRouter } from './modules/notes/notes.routes.js';
+import { remindersRouter } from './modules/reminders/reminders.routes.js';
+import { todosRouter } from './modules/todos/todos.routes.js';
 import { meRouter } from './modules/users/me.routes.js';
 import { healthRouter } from './routes/health.js';
 
@@ -48,6 +50,8 @@ export function createApp({ env, db, googleFactory, ai, now }: AppDeps) {
     '/notes',
     notesRouter({ db, ai: ai ?? createAIProvider(env), now: now ?? (() => new Date()) }),
   );
+  protectedApi.use('/todos', todosRouter(db));
+  protectedApi.use('/reminders', remindersRouter(db, now ?? (() => new Date())));
   app.use('/api', protectedApi);
 
   app.use(notFoundHandler);
