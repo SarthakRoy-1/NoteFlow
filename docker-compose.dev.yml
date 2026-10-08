@@ -1,0 +1,23 @@
+# Development-only PostgreSQL. (Not the Docker "bonus" deliverable.)
+# Usage: docker compose -f docker-compose.dev.yml up -d
+# The password comes from POSTGRES_PASSWORD in your local .env (never committed).
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: noteflow-dev-db
+    environment:
+      POSTGRES_USER: noteflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: noteflow
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - noteflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U noteflow -d noteflow']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  noteflow_pgdata:

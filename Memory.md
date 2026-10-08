@@ -13,8 +13,9 @@ Use the assignment priority when tracking progress:
 ```text
 P0 — Core / Required
 - [x] Repository inspection (greenfield; docs only)
-- [ ] Google OAuth
-- [ ] Database schema
+- [~] Google OAuth (full flow + sessions built and tested with a Google test double;
+      NOT yet exercised against real Google — needs credentials in .env)
+- [x] Database schema (8 tables, SQL migration applied to dev + test DBs)
 - [ ] Notes CRUD
 - [ ] AI extraction + structured validation
 - [ ] Todos
@@ -44,7 +45,7 @@ Only mark a feature complete after it is implemented, integrated, and verified.
 ### Current Phase
 
 ```text
-Phase 0 complete; next: Phase 1 — Foundation
+Phase 1 complete (Foundation); next: Phase 2 — Notes
 ```
 
 ### Current Feature
@@ -62,15 +63,13 @@ None
 ### Current Objective
 
 ```text
-Inspect the repository and determine the existing frontend, backend, database,
-authentication, AI provider, tests, and deployment setup before selecting or
-changing implementation technologies.
+Phase 2: Notes CRUD (backend ownership-scoped + frontend UI), no AI yet.
 ```
 
 ### Status
 
 ```text
-PHASE 0 VERIFIED — awaiting go-ahead for Phase 1
+PHASE 1 VERIFIED — awaiting go-ahead for Phase 2
 ```
 
 ---
@@ -87,6 +86,19 @@ Record the most recent completed work.
 - Frontend foundation: Vite+React+TS, Router, TanStack Query provider, Design.md tokens
   (light/dark), home page. 1 test.
 - docs/07_FINAL_REVIEW_CHECKLIST.md created; README with setup + env table.
+- Phase 1: Drizzle schema + SQL migration 0000_init (users, sessions, notes, todos, reminders,
+  ai_dismissed, ask_history, ask_history_sources); composite FK (source_note_id,user_id) ->
+  notes(id,user_id) so derived rows can never point at another user's note.
+- Sessions: 256-bit random token, only SHA-256 hash stored, httpOnly + SameSite=Lax cookie
+  (Secure in production), expiry enforced, logout deletes the row.
+- Google OAuth (openid-client): code flow + PKCE S256 + state + nonce + ID-token verification;
+  transient signed oauth cookie; upsert by google_sub; failures redirect to /login?error=<code>.
+- requireAuth, GET/PATCH /api/me (IANA timezone validated with Luxon), POST /api/auth/logout,
+  Origin check on state-changing requests, helmet.
+- Frontend: login page with error messages, RequireAuth, home with sign-out.
+- Test DB strategy: TEST_DATABASE_URL (*_test, must differ from DATABASE_URL), auto-created +
+  migrated in globalSetup, TRUNCATE CASCADE between tests, files serial.
+- Dev Postgres via docker-compose.dev.yml (container noteflow-dev-db).
 ```
 
 ---
@@ -120,7 +132,16 @@ Record important architectural or product decisions.
   app can report "not configured" to users instead of crashing.
 - Dev: Vite proxies /api to :3001 (same-origin cookies).
 - Phase order deviation planned: Phase 7 (timezone) built together with Phase 3 (extraction).
-- No Postgres client installed locally (no psql); Docker is available — decide DB provisioning in Phase 1.
+- Dev DB: Postgres 16 in Docker (docker-compose.dev.yml); password from local .env only.
+- sessions.id = SHA-256(token). Unknown /api paths return 401 when signed out (no route leakage).
+- OAuth failures are redirects to {APP_BASE_URL}/login?error=<code>; codes: not_configured,
+  access_denied, invalid_state, login_failed, email_unverified.
+- Browser timezone passed as ?tz= at login; applied only when the user row is first created.
+- PATCH /me body is strict: unknown keys (e.g. user_id) -> 422.
+- Timezone validation: 'UTC' or Region/City that Luxon accepts (rejects 'EST', offsets).
+- ask_history.status enum: answered | no_info | failed.
+- drizzle-orm is also a root devDependency so drizzle-kit (hoisted) can resolve it;
+  root package.json `overrides` pins esbuild ^0.25 (clears a dev-tool advisory in drizzle-kit deps).
 ```
 
 Examples:
@@ -139,10 +160,10 @@ Record the latest verification state.
 
 ```text
 Frontend:
-- 1/1 tests pass
+- 9/9 tests pass
 
 Backend:
-- 6/6 tests pass (no DB tests yet)
+- 74/74 tests pass (real Postgres test DB)
 
 Typecheck:
 - Clean (both workspaces)

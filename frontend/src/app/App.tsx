@@ -1,18 +1,20 @@
 import { Route, Routes } from 'react-router-dom';
-
-function HomePage() {
-  return (
-    <main className="page">
-      <h1>NoteFlow</h1>
-      <p className="muted">Capture notes. Let AI turn them into todos and reminders.</p>
-    </main>
-  );
-}
+import { HomePage } from '../features/auth/HomePage';
+import { LoginPage } from '../features/auth/LoginPage';
+import { RequireAuth } from '../features/auth/RequireAuth';
 
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<HomePage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/"
+        element={
+          <RequireAuth>
+            <HomePage />
+          </RequireAuth>
+        }
+      />
     </Routes>
   );
 }

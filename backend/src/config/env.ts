@@ -10,7 +10,11 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   APP_BASE_URL: z.string().url().default('http://localhost:5173'),
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
-  DATABASE_URL: z.string().url(),
+  SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(14),
+  DATABASE_URL: z
+    .string()
+    .url()
+    .refine((u) => /^postgres(ql)?:\/\//.test(u), 'DATABASE_URL must be a postgres:// URL'),
   TEST_DATABASE_URL: optionalString,
   // Google and Anthropic are optional at boot so the app can start and report a clear
   // "not configured" error to the user instead of crashing.
