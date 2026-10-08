@@ -18,7 +18,7 @@
 - [x] PostgreSQL development database running
 - [x] Gemini API key created and stored locally
 - [x] .env.example updated to Gemini configuration
-- [ ] Notes CRUD
+- [x] Notes CRUD (backend + UI, verified)
 - [ ] AI intent extraction
 - [ ] Structured AI validation
 - [ ] Todos
@@ -39,34 +39,34 @@ Only mark a feature complete after it is implemented, integrated, and verified.
 ### Current Phase
 
 ```text
-Phase 2 — Notes CRUD
+Phase 2 complete (Notes CRUD); next: Phase 3 — AI intent extraction
 ```
 
 ### Current Feature
 
 ```text
-Notes
+None (between phases)
 ```
 
 ### Current File
 
 ```text
-Backend/frontend notes modules — implementation not started
+None
 ```
 
 ### Current Objective
 
 ```text
-Implement authenticated Notes CRUD using PostgreSQL, with notes owned by the signed-in Google user.
+Phase 3: AIProvider abstraction + GeminiProvider, structured extraction with validation, timezone-aware dates (Phase 7 merged in). Not started.
 ```
 
 ### Status
 
 ```text
-READY FOR PHASE 2
+PHASE 2 VERIFIED — awaiting go-ahead for Phase 3
 ```
 
-AI extraction is not implemented yet. It is planned for Phase 3 after the Notes CRUD foundation is complete.
+AI extraction is not implemented yet. Saving a note does not call any AI; notes.analysis_status stays 'pending' until Phase 3.
 
 ---
 
@@ -87,6 +87,13 @@ AI extraction is not implemented yet. It is planned for Phase 3 after the Notes 
 - Gemini API key was created for the NoteFlow Google Cloud project.
 - The real Gemini key is stored only in the local .env and is not committed.
 - .env.example now uses GEMINI_API_KEY and GEMINI_MODEL.
+- Phase 2 Notes CRUD: GET/POST /api/notes, GET/PATCH/DELETE /api/notes/:id, all behind
+  requireAuth; every repo query is scoped by the session user id (no unscoped id lookups).
+  Foreign or malformed ids -> 404; unknown body keys (incl. user_id) -> 422. No migration needed.
+- Notes UI: two-pane list/detail on desktop, single pane on mobile; create, view, inline edit,
+  two-step delete; loading/empty/error states; note text rendered as plain text.
+- Live smoke (temp users, since deleted): HTTP CRUD, cross-user 404s, and UI create/edit/delete
+  in the browser pane all worked.
 ```
 
 ---
@@ -124,20 +131,29 @@ The Gemini API has not yet been integrated into application code. The provider a
 - PostgreSQL stores canonical timestamps.
 - Local Docker PostgreSQL is development infrastructure; using Docker locally does not by itself count as completing the assignment's optional Docker submission bonus.
 - The assignment source document must remain unchanged; implementation choices belong in project documentation.
+- Notes validation: title trimmed 1-200 chars, content trimmed 1-20,000 chars; both required.
+  Server is authoritative; frontend mirrors limits in features/notes/notesApi.ts.
+- List endpoint returns summaries (id, title, 160-char preview, timestamps); GET one returns full note.
+  Responses never include user_id. List capped at 500 newest-updated.
+- Cross-user access returns 404 (not 403) so note existence is not revealed.
+- Delete is a hard delete; FK cascades will remove derived todos/reminders in later phases.
+- Frontend routes: /notes, /notes/new, /notes/:id; / redirects to /notes. HomePage replaced by AppShell.
+- Env schema still lists ANTHROPIC_* and does not yet read GEMINI_* (intentionally untouched in
+  Phase 2; switch to Gemini config in Phase 3).
 ```
 
 ---
 
 ## 6. Tests / Verification
 
-Latest verified Phase 1 state:
+Latest verified state (end of Phase 2):
 
 ```text
 Backend:
-- 74 tests passed
+- 117 tests passed (74 from Phase 1 + 43 notes tests)
 
 Frontend:
-- 9 tests passed
+- 31 tests passed (10 auth + 21 notes)
 
 Typecheck:
 - Passed
@@ -185,7 +201,7 @@ The Gemini API key itself has not been pasted into source control or documentati
 ```text
 Phase 0 — Scaffold/tooling                         [x]
 Phase 1 — DB/auth foundation                       [x]
-Phase 2 — Notes CRUD                               [ ]
+Phase 2 — Notes CRUD                               [x]
 Phase 3 — AI intent extraction                     [ ]
 Phase 4 — Todos                                    [ ]
 Phase 5 — Reminders                                [ ]

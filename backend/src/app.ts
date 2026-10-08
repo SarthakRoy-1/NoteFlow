@@ -8,6 +8,7 @@ import type { Db } from './db/client.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { originCheck } from './middleware/originCheck.js';
 import { requireAuth } from './middleware/requireAuth.js';
+import { notesRouter } from './modules/notes/notes.routes.js';
 import { meRouter } from './modules/users/me.routes.js';
 import { healthRouter } from './routes/health.js';
 
@@ -38,6 +39,7 @@ export function createApp({ env, db, googleFactory }: AppDeps) {
   const protectedApi = Router();
   protectedApi.use(requireAuth(db));
   protectedApi.use('/me', meRouter(db));
+  protectedApi.use('/notes', notesRouter(db));
   app.use('/api', protectedApi);
 
   app.use(notFoundHandler);
