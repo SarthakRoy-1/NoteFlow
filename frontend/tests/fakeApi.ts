@@ -1,11 +1,19 @@
 import { vi } from 'vitest';
 
+export interface FakeAnalysis {
+  status: 'pending' | 'ok' | 'failed';
+  error: string | null;
+  todos: number;
+  reminders: number;
+}
+
 export interface FakeNote {
   id: string;
   title: string;
   content: string;
   createdAt: string;
   updatedAt: string;
+  analysis: FakeAnalysis;
 }
 
 export const testUser = {
@@ -27,6 +35,10 @@ export const apiError = (status: number, code: string, message: string) =>
  */
 export class FakeApi {
   notes: FakeNote[] = [];
+  /** What a successful retry produces. */
+  analysisAfterRetry: FakeAnalysis = { status: 'ok', error: null, todos: 1, reminders: 0 };
+  /** Analysis attached to notes created through the UI. */
+  analysisOnCreate: FakeAnalysis = { status: 'ok', error: null, todos: 0, reminders: 0 };
   signedIn = true;
   requests: { method: string; url: string; body?: unknown }[] = [];
   /** Per-"METHOD /path" override that returns a custom response once (or always if `sticky`). */
@@ -49,6 +61,7 @@ export class FakeApi {
       content: `Content ${this.counter}`,
       createdAt: stamp,
       updatedAt: stamp,
+      analysis: { status: 'ok', error: null, todos: 0, reminders: 0 },
       ...partial,
     };
     this.notes.push(note);
@@ -117,8 +130,19 @@ export class FakeApi {
       });
     }
     if (url === '/api/notes' && method === 'POST') {
-      const note = this.add({ title: body.title, content: body.content });
+      const note = this.add({
+        title: body.title,
+        content: body.content,
+        analysis: this.analysisOnCreate,
+      });
       return json({ note }, 201);
+    }
+    const analyze = /^\/api\/notes\/([^/]+)\/analyze$/.exec(url);
+    if (analyze && method === 'POST') {
+      const note = this.notes.find((n) => n.id === analyze[1]);
+      if (!note) return apiError(404, 'NOT_FOUND', 'We could not find that note.');
+      note.analysis = this.analysisAfterRetry;
+      return json({ note });
     }
     const m = /^\/api\/notes\/([^/]+)$/.exec(url);
     if (m) {

@@ -8,11 +8,18 @@ const valid = {
 
 describe('parseEnv', () => {
   it('applies defaults and treats blank optional values as undefined', () => {
-    const env = parseEnv({ ...valid, ANTHROPIC_API_KEY: '', GOOGLE_CLIENT_ID: '  ' });
+    const env = parseEnv({ ...valid, GEMINI_API_KEY: '', GOOGLE_CLIENT_ID: '  ' });
     expect(env.PORT).toBe(3001);
     expect(env.NODE_ENV).toBe('development');
-    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(env.GEMINI_API_KEY).toBeUndefined();
     expect(env.GOOGLE_CLIENT_ID).toBeUndefined();
+  });
+
+  it('reads the Gemini key and model from the environment, with no hardcoded model default', () => {
+    const configured = parseEnv({ ...valid, GEMINI_API_KEY: 'k', GEMINI_MODEL: 'some-model' });
+    expect(configured.GEMINI_API_KEY).toBe('k');
+    expect(configured.GEMINI_MODEL).toBe('some-model');
+    expect(parseEnv(valid).GEMINI_MODEL).toBeUndefined();
   });
 
   it('rejects a short session secret and a missing database url, listing both', () => {

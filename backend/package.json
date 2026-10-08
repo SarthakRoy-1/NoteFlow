@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts"
+    "db:migrate": "tsx src/db/migrate.ts",
+    "ai:smoke": "tsx scripts/live-smoke.ts"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

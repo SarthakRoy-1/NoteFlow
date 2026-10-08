@@ -1,0 +1,1 @@
+ALTER TABLE "reminders" ADD COLUMN "due_has_time" boolean DEFAULT true NOT NULL;

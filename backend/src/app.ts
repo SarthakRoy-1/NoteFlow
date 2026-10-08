@@ -2,6 +2,7 @@ import cookieParser from 'cookie-parser';
 import express, { Router } from 'express';
 import helmet from 'helmet';
 import { authRouter } from './auth/routes.js';
+import { createAIProvider, type AIProvider } from './ai/provider/index.js';
 import { createGoogleAuth, type GoogleAuth } from './auth/google.js';
 import type { Env } from './config/env.js';
 import type { Db } from './db/client.js';
@@ -17,9 +18,13 @@ export interface AppDeps {
   db: Db;
   /** Override the Google client (tests). Defaults to the real OIDC implementation. */
   googleFactory?: () => GoogleAuth;
+  /** Override the AI provider (tests). Defaults to Gemini, or an "unconfigured" stub without a key. */
+  ai?: AIProvider;
+  /** Clock used to resolve relative dates (tests). */
+  now?: () => Date;
 }
 
-export function createApp({ env, db, googleFactory }: AppDeps) {
+export function createApp({ env, db, googleFactory, ai, now }: AppDeps) {
   const app = express();
   app.disable('x-powered-by');
   app.use(helmet());
@@ -39,7 +44,10 @@ export function createApp({ env, db, googleFactory }: AppDeps) {
   const protectedApi = Router();
   protectedApi.use(requireAuth(db));
   protectedApi.use('/me', meRouter(db));
-  protectedApi.use('/notes', notesRouter(db));
+  protectedApi.use(
+    '/notes',
+    notesRouter({ db, ai: ai ?? createAIProvider(env), now: now ?? (() => new Date()) }),
+  );
   app.use('/api', protectedApi);
 
   app.use(notFoundHandler);

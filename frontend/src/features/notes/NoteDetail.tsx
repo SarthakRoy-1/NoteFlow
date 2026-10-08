@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../lib/api';
+import { AnalysisPanel } from './AnalysisPanel';
 import { formatDate } from './NoteList';
 import { NoteForm } from './NoteForm';
 import { errorMessage, useDeleteNote, useNote, useUpdateNote } from './useNotes';
@@ -82,6 +83,7 @@ function NoteDetail({ id }: { id: string }) {
         Updated {formatDate(note.updatedAt)} · Created {formatDate(note.createdAt)}
       </p>
       <p className="note-content">{note.content}</p>
+      <AnalysisPanel noteId={note.id} analysis={note.analysis} />
 
       {remove.isError && (
         <p role="alert" className="alert alert-error">

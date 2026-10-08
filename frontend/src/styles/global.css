@@ -322,3 +322,29 @@ h1 {
   border-color: var(--color-error);
   color: var(--color-error);
 }
+
+/* ---- AI analysis status ---- */
+.analysis {
+  margin: 0 0 var(--space-xl);
+  padding: var(--space-md) var(--space-base);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-muted);
+  font-size: 14px;
+}
+
+.analysis p {
+  margin: 0 0 var(--space-sm);
+}
+
+.analysis-ok {
+  margin-bottom: var(--space-xl);
+  color: var(--color-text-secondary);
+}
+
+.analysis-problem {
+  border: 1px solid var(--color-warning);
+}
+
+.analysis-problem p:last-of-type {
+  margin-bottom: var(--space-md);
+}

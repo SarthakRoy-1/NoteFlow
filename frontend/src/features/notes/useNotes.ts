@@ -1,6 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../../lib/api';
-import { createNote, deleteNote, getNote, listNotes, updateNote, type NoteInput } from './notesApi';
+import {
+  analyzeNote,
+  createNote,
+  deleteNote,
+  getNote,
+  listNotes,
+  updateNote,
+  type NoteInput,
+} from './notesApi';
 
 export const NOTES_KEY = ['notes'] as const;
 export const noteKey = (id: string) => ['notes', id] as const;
@@ -37,6 +45,14 @@ export function useUpdateNote(id: string) {
       qc.setQueryData(noteKey(id), note);
       return qc.invalidateQueries({ queryKey: NOTES_KEY, exact: true });
     },
+  });
+}
+
+export function useRetryAnalysis(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => analyzeNote(id),
+    onSuccess: (note) => qc.setQueryData(noteKey(id), note),
   });
 }
 

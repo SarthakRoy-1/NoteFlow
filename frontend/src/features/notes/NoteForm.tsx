@@ -87,7 +87,7 @@ export function NoteForm({ initial, submitLabel, pending, error, onSubmit, onCan
       )}
       <div className="actions">
         <button type="submit" className="button button-primary" disabled={pending}>
-          {pending ? 'Saving…' : submitLabel}
+          {pending ? 'Saving and analysing…' : submitLabel}
         </button>
         <button type="button" className="button" onClick={onCancel} disabled={pending}>
           Cancel

@@ -3,13 +3,14 @@
 AI notes, todos and reminders. Write notes in plain language; an AI model extracts todos and
 reminders, and you can ask questions about your notes. Sign-in is Google OAuth only.
 
-**Status:** Phase 1 complete (database, Google sign-in, sessions). Notes, AI extraction, todos,
-reminders and Ask AI arrive in later phases (see `Phases.md`; progress in `Memory.md`).
+**Status:** Phases 0-3 complete (foundation, auth, notes CRUD, AI intent extraction). Todos and
+reminders screens, Ask AI and the rest arrive in later phases (see `Phases.md`; progress in
+`Memory.md`).
 
 ## Stack
 
 React + Vite + TypeScript · Node + Express + TypeScript · PostgreSQL + Drizzle · Zod · Luxon ·
-Anthropic Claude (behind a provider interface) · Vitest.
+Google Gemini (behind an `AIProvider` interface) · Vitest.
 
 ## Prerequisites
 
@@ -36,7 +37,7 @@ cp .env.example .env     # then fill in the values (see below)
 | `DATABASE_URL`                          | Dev database, e.g. `postgres://noteflow:<password>@localhost:5432/noteflow` |
 | `TEST_DATABASE_URL`                     | **Separate** test database; the name must end in `_test`             |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | Google OAuth client (see below) |
-| `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | Claude API (Phase 3). If missing, the app shows a clear error        |
+| `GEMINI_API_KEY` / `GEMINI_MODEL`       | Gemini API key and model name (backend-only; the model is never hardcoded). If either is missing the app still runs and shows "AI analysis is not set up" on saved notes |
 
 Generate secrets:
 
@@ -130,7 +131,18 @@ npm test                 # backend + frontend
 | `npm run build`              | Production build of both workspaces              |
 | `npm run check`              | All of the above in order                        |
 
-## API (Phase 1)
+## AI extraction
+
+Saving a note stores it first, then asks the AI which todos/reminders it contains. The reply must be
+JSON matching a strict schema; the backend then checks that every item is quoted from the note,
+resolves dates in the **user's timezone**, and only then writes todos/reminders for that user and
+note. If the AI is unavailable, slow, rate-limited or returns garbage, the note is still saved and
+shows a clear message with a **Retry analysis** button. Re-saving an unchanged note never calls the
+AI or creates duplicates. Tests never call Gemini; they use a scripted fake provider. To check the real API by hand run
+`npm run ai:smoke -w backend` (2 requests; add `-- --all` for 5). The Gemini free tier allows only
+20 requests per day per model, so use it sparingly.
+
+## API
 
 | Method | Path                           | Auth | Notes                                              |
 | ------ | ------------------------------ | ---- | -------------------------------------------------- |
@@ -140,6 +152,12 @@ npm test                 # backend + frontend
 | POST   | `/api/auth/logout`             | no   | deletes the server-side session; safe if signed out |
 | GET    | `/api/me`                      | yes  | current user                                       |
 | PATCH  | `/api/me`                      | yes  | `{ "timezone": "Europe/London" }` (IANA id)        |
+| GET    | `/api/notes`                   | yes  | your notes (summaries)                             |
+| POST   | `/api/notes`                   | yes  | create a note, then analyse it (`{ title, content }`) |
+| GET    | `/api/notes/:id`               | yes  | full note incl. `analysis` status and counts       |
+| PATCH  | `/api/notes/:id`               | yes  | edit; re-analyses only if the text changed         |
+| POST   | `/api/notes/:id/analyze`       | yes  | retry a failed/pending analysis                    |
+| DELETE | `/api/notes/:id`               | yes  | delete the note and what was derived from it       |
 
 Errors always use `{ "error": { "code", "message" } }`. Every other `/api` route requires a session.
 

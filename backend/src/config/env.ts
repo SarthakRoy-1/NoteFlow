@@ -21,8 +21,9 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: optionalString,
   GOOGLE_CLIENT_SECRET: optionalString,
   GOOGLE_REDIRECT_URI: optionalString,
-  ANTHROPIC_API_KEY: optionalString,
-  ANTHROPIC_MODEL: z.string().default('claude-sonnet-5-5'),
+  // Backend-only. The model name is configuration, never hardcoded in application logic.
+  GEMINI_API_KEY: optionalString,
+  GEMINI_MODEL: optionalString,
 });
 
 export type Env = z.infer<typeof envSchema>;

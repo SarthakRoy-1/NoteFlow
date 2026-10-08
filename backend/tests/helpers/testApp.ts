@@ -1,5 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { createApp } from '../../src/app.js';
+import type { AIProvider } from '../../src/ai/provider/index.js';
 import type { GoogleAuth, GoogleIdentity, OAuthChecks } from '../../src/auth/google.js';
 import { createSession, hashToken } from '../../src/auth/sessions.js';
 import { SESSION_COOKIE } from '../../src/auth/cookies.js';
@@ -8,6 +9,11 @@ import { createDb } from '../../src/db/client.js';
 import { sessions, users } from '../../src/db/schema.js';
 import { loadDotenv } from '../../src/loadDotenv.js';
 import { assertSafeTestDatabase } from './safety.js';
+import { FakeAI } from './fakeAi.js';
+
+export { FakeAI };
+/** Fixed clock for every AI/date test: Thursday 8 Oct 2026, 10:00 UTC. */
+export const FIXED_NOW = new Date('2026-10-08T10:00:00Z');
 
 loadDotenv();
 
@@ -95,6 +101,17 @@ export class FakeGoogle implements GoogleAuth {
   }
 }
 
-export function buildApp(db: TestDb, env = testEnv(), google?: FakeGoogle) {
-  return createApp({ env, db, googleFactory: google ? () => google : undefined });
+export function buildApp(
+  db: TestDb,
+  env = testEnv(),
+  google?: FakeGoogle,
+  extra: { ai?: AIProvider; now?: () => Date } = {},
+) {
+  return createApp({
+    env,
+    db,
+    googleFactory: google ? () => google : undefined,
+    ai: extra.ai ?? new FakeAI(),
+    now: extra.now ?? (() => FIXED_NOW),
+  });
 }

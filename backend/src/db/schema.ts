@@ -17,11 +17,8 @@ import {
 /** timestamptz: PostgreSQL stores the instant in UTC; the driver returns JS Dates. */
 const timestamptz = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const createdAt = () => timestamptz('created_at').notNull().defaultNow();
-const updatedAt = () =>
-  timestamptz('updated_at')
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date());
+/** No implicit ON UPDATE: code sets updated_at explicitly, so status-only changes never bump it. */
+const updatedAt = () => timestamptz('updated_at').notNull().defaultNow();
 
 export const analysisStatus = pgEnum('analysis_status', ['pending', 'ok', 'failed']);
 export const reminderStatus = pgEnum('reminder_status', ['pending', 'acknowledged', 'dismissed']);
@@ -124,8 +121,10 @@ export const reminders = pgTable(
     sourceNoteId: uuid('source_note_id').notNull(),
     content: text('content').notNull(),
     person: text('person'),
-    /** NULL = no time was given. Such a reminder never alerts. */
+    /** NULL = no time or date was given. Such a reminder never alerts. */
     dueAt: timestamptz('due_at'),
+    /** false = only a date was given; dueAt is then the start of that local day. */
+    dueHasTime: boolean('due_has_time').notNull().default(true),
     status: reminderStatus('status').notNull().default('pending'),
     alertedAt: timestamptz('alerted_at'),
     createdByAi: boolean('created_by_ai').notNull().default(false),
