@@ -47,7 +47,8 @@ export function extractTerms(question: string): string[] {
 /**
  * The user's most relevant notes for a question, via the existing full-text index on
  * to_tsvector('english', title || ' ' || content). Terms are OR-ed (a note matching more of them
- * ranks higher) because a natural-language question rarely appears in a note word for word.
+ * ranks higher; normalization 1 divides by the log of the note length so long notes do not win
+ * just by being long) because a natural-language question rarely appears in a note word for word.
  * Order is deterministic: rank, then most recently edited, then id. Always scoped to `userId`.
  */
 export async function retrieveNotes(
@@ -64,7 +65,7 @@ export async function retrieveNotes(
     sql` || `,
   );
   const vector = sql`to_tsvector('english', ${notes.title} || ' ' || ${notes.content})`;
-  const rank = sql<number>`ts_rank_cd(${vector}, ${query})`;
+  const rank = sql<number>`ts_rank_cd(${vector}, ${query}, 1)`;
 
   const rows = await db
     .select({ id: notes.id, title: notes.title, content: notes.content })
@@ -89,7 +90,11 @@ export interface NewAsk {
   createdAt: Date;
 }
 
-/** One transaction: the entry and its sources are saved together or not at all. */
+/**
+ * One transaction: the entry and its sources are saved together or not at all. The AI call between
+ * retrieval and saving can take seconds, so a source note may have been deleted meanwhile: only
+ * notes that still exist (and belong to this user) are saved as sources.
+ */
 export async function saveAsk(db: Db, userId: string, input: NewAsk): Promise<AskDto> {
   return db.transaction(async (tx) => {
     const [ask] = await tx
@@ -104,9 +109,29 @@ export async function saveAsk(db: Db, userId: string, input: NewAsk): Promise<As
       .returning();
     if (!ask) throw new Error('failed to save ask history');
 
-    if (input.sources.length > 0) {
+    const alive = new Set(
+      input.sources.length === 0
+        ? []
+        : (
+            await tx
+              .select({ id: notes.id })
+              .from(notes)
+              .where(
+                and(
+                  eq(notes.userId, userId),
+                  inArray(
+                    notes.id,
+                    input.sources.map((s) => s.id),
+                  ),
+                ),
+              )
+          ).map((n) => n.id),
+    );
+    const sources = input.sources.filter((s) => alive.has(s.id));
+
+    if (sources.length > 0) {
       await tx.insert(askHistorySources).values(
-        input.sources.map((s, rank) => ({
+        sources.map((s, rank) => ({
           askId: ask.id,
           noteId: s.id,
           noteTitleSnapshot: s.title,
@@ -120,7 +145,7 @@ export async function saveAsk(db: Db, userId: string, input: NewAsk): Promise<As
       answer: ask.answer,
       status: ask.status,
       createdAt: ask.createdAt.toISOString(),
-      sources: input.sources.map((s) => ({ noteId: s.id, title: s.title })),
+      sources: sources.map((s) => ({ noteId: s.id, title: s.title })),
     };
   });
 }

@@ -1,15 +1,21 @@
 import { and, eq } from 'drizzle-orm';
-import { extractIntents, toExtractionError } from '../../ai/extraction/extractor.js';
+import {
+  ExtractionError,
+  extractIntents,
+  toExtractionError,
+} from '../../ai/extraction/extractor.js';
 import type { AIProvider } from '../../ai/provider/index.js';
 import type { Db } from '../../db/client.js';
 import { notes } from '../../db/schema.js';
 import { logger } from '../../lib/logger.js';
+import type { RateLimiter } from '../../lib/rateLimit.js';
 import { reconcileNote } from '../../reconcile/reconcile.js';
 
 export interface AnalysisDeps {
   db: Db;
   ai: AIProvider;
   now: () => Date;
+  limiter: RateLimiter;
 }
 
 export interface AnalysisOwner {
@@ -17,7 +23,7 @@ export interface AnalysisOwner {
   timezone: string;
 }
 
-export type AnalysisOutcome = 'ok' | 'failed' | 'superseded' | 'missing';
+export type AnalysisOutcome = 'ok' | 'failed' | 'rate_limited' | 'superseded' | 'missing';
 
 /**
  * Analyse one note for its owner and store the validated result. Never throws: every failure is
@@ -42,6 +48,14 @@ export async function analyzeNote(
     if (!note) return 'missing';
     snapshot = note;
 
+    // Before the AI is called. The note is already saved; the user can retry the analysis later.
+    if (!deps.limiter.take(owner.id)) {
+      throw new ExtractionError(
+        'AI_RATE_LIMITED',
+        'Your note was saved. You have used the AI a lot in the last minute, so it was not analysed. Please retry the analysis shortly.',
+      );
+    }
+
     const items = await extractIntents({
       provider: deps.ai,
       title: note.title,
@@ -63,7 +77,7 @@ export async function analyzeNote(
     // Only the failure code is logged: never note text, model output or credentials.
     logger.warn('Note analysis failed', { code: failure.code, noteId });
     if (snapshot) await markFailed(db, owner.id, noteId, snapshot.updatedAt, failure.userMessage);
-    return 'failed';
+    return failure.code === 'AI_RATE_LIMITED' ? 'rate_limited' : 'failed';
   }
 }
 

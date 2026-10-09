@@ -228,6 +228,22 @@ describe('note retrieval', () => {
     expect(res.body.ask.sources.map((s: { title: string }) => s.title)).toEqual(['Strong', 'Weak']);
   });
 
+  it('does not let a long note outrank an equally good short one just by length', async () => {
+    const { app, ai } = setup();
+    const u = await createUserWithSession(db);
+    // The long note is newer, so without length normalization recency alone would put it first.
+    await seedNote(u.user.id, 'Short', 'budget meeting', new Date('2026-01-01'));
+    await seedNote(
+      u.user.id,
+      'Long',
+      `budget meeting ${'unrelated filler words '.repeat(400)}`,
+      new Date('2026-06-01'),
+    );
+    ai.respondWith(answer());
+    const res = await ask(app, u.cookie, { question: 'budget meeting' });
+    expect(res.body.ask.sources.map((s: { title: string }) => s.title)).toEqual(['Short', 'Long']);
+  });
+
   it('breaks ties by most recent edit, deterministically', async () => {
     const { app, ai } = setup();
     const u = await createUserWithSession(db);
@@ -469,6 +485,37 @@ describe('answers and structured output', () => {
     expect(row?.userId).toBe(a.user.id);
     const sources = await db.select().from(askHistorySources);
     expect(sources.map((s) => s.noteId)).toEqual([aNote.id]);
+  });
+
+  it('survives a source note being deleted while the AI is working', async () => {
+    const { app, ai } = setup();
+    const u = await createUserWithSession(db);
+    const keep = await seedNote(u.user.id, 'Keep', 'zebra stripes', new Date('2026-02-01'));
+    const gone = await seedNote(u.user.id, 'Gone', 'zebra herd', new Date('2026-01-01'));
+    ai.respondWith(async () => {
+      await db.delete(notes).where(eq(notes.id, gone.id));
+      return answer('Zebras have stripes.');
+    });
+    const res = await ask(app, u.cookie, { question: 'zebra' });
+    expect(res.status).toBe(201);
+    expect(res.body.ask.sources).toEqual([{ noteId: keep.id, title: 'Keep' }]);
+    const saved = await db.select().from(askHistorySources);
+    expect(saved.map((s) => s.noteId)).toEqual([keep.id]);
+    expect(await historyRows()).toHaveLength(1);
+  });
+
+  it('still saves the answer when every source note was deleted meanwhile', async () => {
+    const { app, ai } = setup();
+    const u = await createUserWithSession(db);
+    const only = await seedNote(u.user.id, 'Only', 'zebra stripes');
+    ai.respondWith(async () => {
+      await db.delete(notes).where(eq(notes.id, only.id));
+      return answer('Zebras have stripes.');
+    });
+    const res = await ask(app, u.cookie, { question: 'zebra' });
+    expect(res.status).toBe(201);
+    expect(res.body.ask.sources).toEqual([]);
+    expect(await db.select().from(askHistorySources)).toHaveLength(0);
   });
 
   it('shows no sources when the model says the notes are not enough', async () => {

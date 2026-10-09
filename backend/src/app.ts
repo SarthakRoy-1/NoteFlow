@@ -6,6 +6,7 @@ import { createAIProvider, type AIProvider } from './ai/provider/index.js';
 import { createGoogleAuth, type GoogleAuth } from './auth/google.js';
 import type { Env } from './config/env.js';
 import type { Db } from './db/client.js';
+import { AI_CALLS_PER_MINUTE, createRateLimiter } from './lib/rateLimit.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { originCheck } from './middleware/originCheck.js';
 import { requireAuth } from './middleware/requireAuth.js';
@@ -25,9 +26,11 @@ export interface AppDeps {
   ai?: AIProvider;
   /** Clock used to resolve relative dates (tests). */
   now?: () => Date;
+  /** Per-user AI calls per minute (defaults to 10; tests override). */
+  aiCallsPerMinute?: number;
 }
 
-export function createApp({ env, db, googleFactory, ai, now }: AppDeps) {
+export function createApp({ env, db, googleFactory, ai, now, aiCallsPerMinute }: AppDeps) {
   const app = express();
   app.disable('x-powered-by');
   app.use(helmet());
@@ -49,10 +52,16 @@ export function createApp({ env, db, googleFactory, ai, now }: AppDeps) {
   protectedApi.use('/me', meRouter(db));
   const provider = ai ?? createAIProvider(env);
   const clock = now ?? (() => new Date());
-  protectedApi.use('/notes', notesRouter({ db, ai: provider, now: clock }));
+  // One allowance per user for every real AI call (note analysis and Ask AI).
+  const limiter = createRateLimiter({
+    limit: aiCallsPerMinute ?? AI_CALLS_PER_MINUTE,
+    windowMs: 60_000,
+    now: clock,
+  });
+  protectedApi.use('/notes', notesRouter({ db, ai: provider, now: clock, limiter }));
   protectedApi.use('/todos', todosRouter(db));
   protectedApi.use('/reminders', remindersRouter(db, clock));
-  protectedApi.use('/ask', askRouter({ db, ai: provider, now: clock }));
+  protectedApi.use('/ask', askRouter({ db, ai: provider, now: clock, limiter }));
   app.use('/api', protectedApi);
 
   app.use(notFoundHandler);

@@ -105,7 +105,7 @@ export function buildApp(
   db: TestDb,
   env = testEnv(),
   google?: FakeGoogle,
-  extra: { ai?: AIProvider; now?: () => Date } = {},
+  extra: { ai?: AIProvider; now?: () => Date; aiCallsPerMinute?: number } = {},
 ) {
   return createApp({
     env,
@@ -113,5 +113,6 @@ export function buildApp(
     googleFactory: google ? () => google : undefined,
     ai: extra.ai ?? new FakeAI(),
     now: extra.now ?? (() => FIXED_NOW),
+    aiCallsPerMinute: extra.aiCallsPerMinute,
   });
 }

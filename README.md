@@ -160,7 +160,7 @@ them (more matching question words first, then most recently edited), and sends 
 answerable }`), then saved with the exact notes that were retrieved as its sources. If no note
 matches, the answer is "not enough information" and the AI is not called. If the AI says the notes
 are not enough, no source is shown. If the AI fails or returns unusable output, you get a clear error
-and **nothing is saved**. Notes and questions are treated as untrusted data (delimited by a random
+and **nothing is saved**. Each user may make 10 AI calls a minute (note analysis and Ask AI share it); beyond that Ask AI answers 429 and a saved note simply skips analysis until you retry (per-process limit, single server). Notes and questions are treated as untrusted data (delimited by a random
 per-request marker and declared as data in the system prompt). History (last 50, newest first) is
 read-only and private to you; a deleted source note keeps its saved title and is no longer a link.
 

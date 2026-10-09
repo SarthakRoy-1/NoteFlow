@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Db } from '../../db/client.js';
-import { notFound } from '../../lib/errors.js';
+import { AppError, notFound } from '../../lib/errors.js';
 import { currentUser } from '../../middleware/requireAuth.js';
 import { analyzeNote, type AnalysisDeps } from './analysis.service.js';
 import * as repo from './notes.repo.js';
@@ -67,7 +67,16 @@ export function notesRouter(deps: AnalysisDeps) {
     const user = currentUser(req);
     const id = parseNoteId(req.params.id);
     const existing = await load(db, user.id, id);
-    if (existing.analysis.status !== 'ok') await analyzeNote(deps, user, id);
+    if (existing.analysis.status !== 'ok') {
+      const outcome = await analyzeNote(deps, user, id);
+      if (outcome === 'rate_limited') {
+        throw new AppError(
+          'AI_RATE_LIMITED',
+          429,
+          'You are retrying too quickly. Please wait a minute and try again.',
+        );
+      }
+    }
     res.json({ note: await load(db, user.id, id) });
   });
 

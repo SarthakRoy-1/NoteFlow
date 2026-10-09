@@ -16,7 +16,7 @@ const envSchema = z.object({
     .url()
     .refine((u) => /^postgres(ql)?:\/\//.test(u), 'DATABASE_URL must be a postgres:// URL'),
   TEST_DATABASE_URL: optionalString,
-  // Google and Anthropic are optional at boot so the app can start and report a clear
+  // Google and Gemini settings are optional at boot so the app can start and report a clear
   // "not configured" error to the user instead of crashing.
   GOOGLE_CLIENT_ID: optionalString,
   GOOGLE_CLIENT_SECRET: optionalString,

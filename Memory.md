@@ -95,7 +95,7 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
 - Notes UI: two-pane list/detail on desktop, single pane on mobile; create, view, inline edit,
   two-step delete; loading/empty/error states; note text rendered as plain text.
 - Phase 3 AI intent extraction: AIProvider interface + GeminiProvider (REST generateContent, key in
-  x-goog-api-key header, model from GEMINI_MODEL, 20s timeout, one retry on 429/5xx/network only).
+  x-goog-api-key header, model from GEMINI_MODEL, 12s per-attempt timeout (was 20s), one retry on 5xx/network only).
   Pipeline: provider -> JSON parse -> Zod -> business rules (evidence must be quoted from the note,
   person must be named in the note, dates resolved in user tz or dropped, <=20 items) -> fingerprint
   reconcile into todos/reminders in one transaction. No UI for todos/reminders yet.
@@ -178,6 +178,20 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
 - Phase 5 limitations: alerts only show while the app is open (no email/push by design); the Reminders
   link badge/banner depend on the 30s poll if the timer is throttled in a background tab; a date-only
   reminder alerts from the start of its day; manual due edits use the account timezone (no picker yet).
+- Post-Phase-6 hardening (from the Ponytail review/audit; uncommitted until reviewed):
+  (1) Per-user AI rate limit, lib/rateLimit.ts: sliding window, 10 real AI calls per user per minute,
+  one shared allowance for note analysis and Ask AI, checked just before the provider is called (an Ask
+  with no matching note costs nothing and is not counted). Ask over the limit -> 429 AI_RATE_LIMITED, no
+  AI call. Saving/editing a note still succeeds; its analysis is marked failed with a "retry shortly"
+  message; POST /notes/:id/analyze -> 429. shortcut: per-process; move to a shared store when running more
+  than one server. It limits one user's rate; it does NOT guard Gemini's daily quota (20/day free tier).
+  (2) Ask AI delete race: saveAsk re-reads which retrieved notes still exist (user-scoped) inside its
+  transaction and saves only those sources, so deleting a note while the AI works no longer causes a 500.
+  (3) GeminiProvider default timeout 20s -> 12s (worst case ~25s with the one 5xx retry, under typical
+  30s proxy limits). (4) Retrieval ranks with ts_rank_cd(..., 1) (length normalization) so long notes do
+  not win by length alone. (5) Stale docs/comments about Gemini/Anthropic corrected.
+  Deferred on purpose: ask history retention, 500-item list cap/pagination, session cleanup for other
+  users, Todo/Reminder component dedup, vector search/embeddings/synonyms, a shared rate limiter.
 - Phase 6 limitations: retrieval is keyword-based (stemming, no synonyms/typo tolerance, title not weighted);
   a question whose words appear in no note gets "not enough information" even if a paraphrase exists; only
   the top 5 notes (4,000 chars each) are considered; history is capped at 50 entries and cannot be deleted;
@@ -188,7 +202,7 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
 - Gemini returns 503 "high demand" intermittently for gemini-3.8-flash; handled by one retry.
 ```
 
-The Gemini API has not yet been integrated into application code. The provider abstraction and Gemini implementation are planned for the AI extraction phase.
+The Gemini provider is integrated (AIProvider -> GeminiProvider -> Gemini API, used by extraction and Ask AI). It has only been exercised with fakes and mocked HTTP: no successful live Gemini extraction or Ask AI answer has been observed yet.
 
 ---
 

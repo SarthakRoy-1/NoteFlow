@@ -157,6 +157,14 @@ describe('GeminiProvider failures', () => {
     expect(f).toHaveBeenCalledTimes(1);
   });
 
+  it('waits at most 12 seconds per attempt by default (two attempts stay under ~30s)', async () => {
+    const spy = vi.spyOn(AbortSignal, 'timeout');
+    const f = vi.fn(async () => ok('{"items":[]}'));
+    await provider(f as unknown as typeof fetch).generateStructured(request);
+    expect(spy).toHaveBeenCalledWith(12_000);
+    spy.mockRestore();
+  });
+
   it('reports blocked prompts and safety-blocked candidates', async () => {
     const blockedPrompt = vi.fn(
       async () => new Response(JSON.stringify({ promptFeedback: { blockReason: 'SAFETY' } })),

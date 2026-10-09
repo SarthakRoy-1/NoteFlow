@@ -483,7 +483,7 @@ describe('duplicate safety', () => {
     noteId = row?.id ?? '';
     const { analyzeNote } = await import('../../src/modules/notes/analysis.service.js');
     const outcome = await analyzeNote(
-      { db, ai, now: () => new Date('2026-10-08T10:00:00Z') },
+      { db, ai, now: () => new Date('2026-10-08T10:00:00Z'), limiter: { take: () => true } },
       { id: u.user.id, timezone: 'UTC' },
       noteId,
     );

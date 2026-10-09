@@ -6,7 +6,7 @@ const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 export interface GeminiOptions {
   apiKey: string;
   model: string;
-  /** Per-attempt timeout. */
+  /** Per-attempt timeout (default 12s: two attempts plus the retry delay stay under ~30s). */
   timeoutMs?: number;
   /** Total attempts (first try + retries). Retries only for 429, 5xx and network errors. */
   maxAttempts?: number;
@@ -36,7 +36,7 @@ export class GeminiProvider implements AIProvider {
   constructor(options: GeminiOptions) {
     this.apiKey = options.apiKey;
     this.model = options.model;
-    this.timeoutMs = options.timeoutMs ?? 20_000;
+    this.timeoutMs = options.timeoutMs ?? 12_000;
     this.maxAttempts = Math.max(1, options.maxAttempts ?? 2);
     this.retryDelayMs = options.retryDelayMs ?? 1_000;
     this.baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;

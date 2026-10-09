@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { answerQuestion } from '../../ai/ask/answerer.js';
 import type { AIProvider } from '../../ai/provider/index.js';
 import type { Db } from '../../db/client.js';
-import { notFound } from '../../lib/errors.js';
+import { AppError, notFound } from '../../lib/errors.js';
+import type { RateLimiter } from '../../lib/rateLimit.js';
 import { currentUser } from '../../middleware/requireAuth.js';
 import * as repo from './ask.repo.js';
 import { ASK_NOT_FOUND, askBody, parseAskId } from './ask.schemas.js';
@@ -15,6 +16,7 @@ export interface AskDeps {
   db: Db;
   ai: AIProvider;
   now: () => Date;
+  limiter: RateLimiter;
 }
 
 /**
@@ -22,7 +24,7 @@ export interface AskDeps {
  * are retrieved here, for that user only, and the sources shown with the answer are exactly the
  * notes retrieved (never ids supplied by the client or the model).
  */
-export function askRouter({ db, ai, now }: AskDeps) {
+export function askRouter({ db, ai, now, limiter }: AskDeps) {
   const router = Router();
 
   router.post('/', async (req, res) => {
@@ -42,6 +44,15 @@ export function askRouter({ db, ai, now }: AskDeps) {
       });
       res.status(201).json({ ask });
       return;
+    }
+
+    // Checked only when the AI will really be called (the no-match answer above costs nothing).
+    if (!limiter.take(user.id)) {
+      throw new AppError(
+        'AI_RATE_LIMITED',
+        429,
+        'You are asking too quickly. Please wait a minute and try again.',
+      );
     }
 
     // A provider failure throws here, before anything is saved: no misleading history entry.
