@@ -24,7 +24,8 @@
 - [x] Structured AI validation (parse -> Zod -> business rules -> normalize; tested)
 - [x] Todos (API + UI, verified incl. live smoke; no Gemini used)
 - [x] Reminders (API + UI + in-app alerts, verified incl. live smoke; no Gemini used)
-- [ ] Ask AI
+- [~] Ask AI (API + UI + history, verified with a fake/scripted provider incl. live smoke; a real Gemini
+      answer has NOT been observed - same quota blocker as Phase 3)
 - [x] Timezone-aware AI extraction (backend resolves dates in the user's IANA tz; tested)
 - [~] Duplicate prevention/reconciliation (fingerprint + reconcile in place and tested; Phase 8 adds edit-flow UI cases)
 - [x] AI-created labels (shown on todos and reminders)
@@ -40,7 +41,7 @@ Only mark a feature complete after it is implemented, integrated, and verified.
 ### Current Phase
 
 ```text
-Phase 5 (Reminders) implemented and verified; Phase 3 live Gemini success check still pending quota reset
+Phase 6 (Ask AI) implemented and verified with a fake provider; Phase 3 live Gemini success check still pending quota reset
 ```
 
 ### Current Feature
@@ -58,13 +59,13 @@ None
 ### Current Objective
 
 ```text
-After the Gemini daily quota resets (~00:00 UTC) run `npm run ai:smoke -w backend` to close out Phase 3. Phase 4 + Phase 5 changes are uncommitted until reviewed.
+After the Gemini daily quota resets (~00:00 UTC) run `npm run ai:smoke -w backend` to close out Phase 3 (and try one real Ask AI question). Phase 6 changes are uncommitted until reviewed. Phase 3 = 4e8608a; Phase 4+5 = 23c4765.
 ```
 
 ### Status
 
 ```text
-PHASE 4 + 5 VERIFIED (uncommitted); PHASE 3 LIVE GEMINI SUCCESS STILL PENDING
+PHASE 6 VERIFIED WITH FAKE PROVIDER (uncommitted); PHASE 3 LIVE GEMINI SUCCESS STILL PENDING
 ```
 
 Saving a note now stores it, then runs AI extraction; notes.analysis_status is pending|ok|failed.
@@ -128,6 +129,32 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
   Acknowledged, with edit, delete (two-step), Got it / Re-open, source-note link.
 - Live smoke (temp users, since deleted): HTTP CRUD, cross-user 404s, and UI create/edit/delete
   in the browser pane all worked.
+- Phase 6 Ask AI (no migration: ask_history + ask_history_sources + the notes GIN full-text index already existed):
+  POST /api/ask {question} -> 201 {ask:{id,question,answer,status,createdAt,sources:[{noteId,title}]}};
+  GET /api/ask/history (last 50, newest first); GET /api/ask/history/:id (foreign/malformed -> 404).
+  Body is strict {question} (trimmed, 1-500 chars, no NUL); user_id, note ids, sources etc. -> 422.
+  Retrieval (modules/ask/ask.repo.ts): question -> distinct lowercase words (max 12) -> each bound as
+  plainto_tsquery('english', $n) and OR-ed -> `to_tsvector('english', title||' '||content) @@ query` (uses the
+  existing GIN index), scoped by user_id, ordered ts_rank_cd desc, updated_at desc, id asc, LIMIT 5, each note
+  cut to 4,000 chars. No embeddings/vector DB.
+  AI (ai/ask/{schema,prompt,answerer}.ts, via AIProvider): reply must be {answer<=4000, answerable:boolean};
+  parse (fence stripped) -> Zod; extra keys (e.g. invented source ids) are dropped. Notes and question are
+  delimited by random per-request markers and declared UNTRUSTED in the system prompt.
+  Sources are the notes the BACKEND retrieved, never model/client ids. No matching note -> deterministic
+  "not enough information" (status no_info, no AI call, saved). Model says answerable=false -> status no_info
+  and NO sources saved/shown. Provider/validation failure -> mapped 429/502/503/504/422 with a safe message,
+  NOTHING saved (status 'failed' exists in the enum but is intentionally unused).
+  History: entry + sources saved in one transaction; ask_history_sources keeps a title snapshot, note_id is
+  SET NULL on note delete, so history still reads correctly (shown as "(note deleted)", not a link). A
+  renamed note shows its current title. Read-only: no edit/delete endpoints. Source join is ownership-scoped.
+  UI: /ask page + "Ask AI" nav link: question box (counter, validation), Question -> Answer -> Sources used
+  (links to /notes/:id), history list (select to review, no API call), loading/error/empty states.
+  Ask answers are rendered as text (never HTML).
+- Phase 6 live smoke (real server + real dev DB + a scripted local AI that never touches the network; temp
+  users/notes, since deleted): 401s, user_id 422, foreign Origin 403, ask via UI, answer + source link opens
+  the right note, history survives reload, history item selection, provider failure -> safe error with the
+  question kept and nothing saved, user B sees an empty history and gets 404 for A's entry, and the prompt
+  sent to the AI never contained B's note. No Gemini request was made.
 ```
 
 ---
@@ -151,6 +178,10 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
 - Phase 5 limitations: alerts only show while the app is open (no email/push by design); the Reminders
   link badge/banner depend on the 30s poll if the timer is throttled in a background tab; a date-only
   reminder alerts from the start of its day; manual due edits use the account timezone (no picker yet).
+- Phase 6 limitations: retrieval is keyword-based (stemming, no synonyms/typo tolerance, title not weighted);
+  a question whose words appear in no note gets "not enough information" even if a paraphrase exists; only
+  the top 5 notes (4,000 chars each) are considered; history is capped at 50 entries and cannot be deleted;
+  no streaming and no per-user rate limit on Ask AI.
 - Gemini free tier allows only 20 requests/day/model. Every note save and Ask AI question costs one, so
   demos/tests of the real app can exhaust it. Consider a billed key or a second model for later phases.
   429s are no longer retried (a retry only burns quota); daily-quota 429s show a distinct message.

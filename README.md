@@ -3,8 +3,8 @@
 AI notes, todos and reminders. Write notes in plain language; an AI model extracts todos and
 reminders, and you can ask questions about your notes. Sign-in is Google OAuth only.
 
-**Status:** Phases 0-5 done (foundation, auth, notes CRUD, AI intent extraction, todos, reminders). Phase 3's live
-Gemini check is still pending (see `Memory.md`). Ask AI and the rest arrive in later phases (see `Phases.md`; progress in
+**Status:** Phases 0-6 done (foundation, auth, notes CRUD, AI intent extraction, todos, reminders, Ask AI). Phase 3's
+live Gemini check is still pending (see `Memory.md`). The rest arrives in later phases (see `Phases.md`; progress in
 `Memory.md`).
 
 ## Stack
@@ -151,6 +151,19 @@ the next reminder is due. The alert stays until you press **Got it**, so a reloa
 shows the same alerts. A reminder with no time never alerts. A date-only reminder ("tomorrow")
 alerts from the start of that day in your timezone; no clock time is invented for it.
 
+## Ask AI
+
+Ask a question about your own notes on the **Ask AI** page. The server (never the browser or the model)
+picks the notes: it searches **only your notes** with the existing PostgreSQL full-text index, ranks
+them (more matching question words first, then most recently edited), and sends at most **5** notes
+(each cut to 4,000 characters) with your question to the AI. The answer is validated (`{ answer,
+answerable }`), then saved with the exact notes that were retrieved as its sources. If no note
+matches, the answer is "not enough information" and the AI is not called. If the AI says the notes
+are not enough, no source is shown. If the AI fails or returns unusable output, you get a clear error
+and **nothing is saved**. Notes and questions are treated as untrusted data (delimited by a random
+per-request marker and declared as data in the system prompt). History (last 50, newest first) is
+read-only and private to you; a deleted source note keeps its saved title and is no longer a link.
+
 ## API
 
 | Method | Path                           | Auth | Notes                                              |
@@ -176,6 +189,9 @@ alerts from the start of that day in your timezone; no clock time is invented fo
 | GET    | `/api/reminders/:id`           | yes  | one reminder                                       |
 | PATCH  | `/api/reminders/:id`           | yes  | `{ text?, person?, due?, acknowledged? }`; `due` is `{ date, time? }` in your timezone or `null`; other fields are rejected |
 | DELETE | `/api/reminders/:id`           | yes  | delete a reminder (an AI-created one will not come back on re-analysis) |
+| POST   | `/api/ask`                     | yes  | `{ question }` (1-500 chars; other fields rejected) -> `201 { ask: { id, question, answer, status, createdAt, sources: [{ noteId, title }] } }`; `status` is `answered` or `no_info` |
+| GET    | `/api/ask/history`             | yes  | your last 50 questions, newest first, each with its sources |
+| GET    | `/api/ask/history/:id`         | yes  | one of your entries (anyone else's, or a malformed id, is 404) |
 
 Errors always use `{ "error": { "code", "message" } }`. Every other `/api` route requires a session.
 

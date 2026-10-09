@@ -9,6 +9,7 @@ import type { Db } from './db/client.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { originCheck } from './middleware/originCheck.js';
 import { requireAuth } from './middleware/requireAuth.js';
+import { askRouter } from './modules/ask/ask.routes.js';
 import { notesRouter } from './modules/notes/notes.routes.js';
 import { remindersRouter } from './modules/reminders/reminders.routes.js';
 import { todosRouter } from './modules/todos/todos.routes.js';
@@ -46,12 +47,12 @@ export function createApp({ env, db, googleFactory, ai, now }: AppDeps) {
   const protectedApi = Router();
   protectedApi.use(requireAuth(db));
   protectedApi.use('/me', meRouter(db));
-  protectedApi.use(
-    '/notes',
-    notesRouter({ db, ai: ai ?? createAIProvider(env), now: now ?? (() => new Date()) }),
-  );
+  const provider = ai ?? createAIProvider(env);
+  const clock = now ?? (() => new Date());
+  protectedApi.use('/notes', notesRouter({ db, ai: provider, now: clock }));
   protectedApi.use('/todos', todosRouter(db));
-  protectedApi.use('/reminders', remindersRouter(db, now ?? (() => new Date())));
+  protectedApi.use('/reminders', remindersRouter(db, clock));
+  protectedApi.use('/ask', askRouter({ db, ai: provider, now: clock }));
   app.use('/api', protectedApi);
 
   app.use(notFoundHandler);

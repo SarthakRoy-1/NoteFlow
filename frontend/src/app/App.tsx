@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { AskPage } from '../features/ask/AskPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RequireAuth } from '../features/auth/RequireAuth';
 import { NewNote } from '../features/notes/NewNote';
@@ -27,6 +28,7 @@ export function App() {
         </Route>
         <Route path="/todos" element={<TodosPage />} />
         <Route path="/reminders" element={<RemindersPage />} />
+        <Route path="/ask" element={<AskPage />} />
         <Route path="*" element={<Navigate to="/notes" replace />} />
       </Route>
     </Routes>

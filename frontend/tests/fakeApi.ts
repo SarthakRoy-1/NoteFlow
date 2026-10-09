@@ -43,6 +43,15 @@ export interface FakeReminder {
   sourceNote: { id: string; title: string };
 }
 
+export interface FakeAsk {
+  id: string;
+  question: string;
+  answer: string;
+  status: 'answered' | 'no_info' | 'failed';
+  createdAt: string;
+  sources: { noteId: string | null; title: string }[];
+}
+
 export const testUser = {
   id: 'u1',
   email: 'pat@example.com',
@@ -64,6 +73,13 @@ export class FakeApi {
   notes: FakeNote[] = [];
   todos: FakeTodo[] = [];
   reminders: FakeReminder[] = [];
+  asks: FakeAsk[] = [];
+  /** What the next successful POST /api/ask returns (besides id, question and time). */
+  askResult: Pick<FakeAsk, 'answer' | 'status' | 'sources'> = {
+    answer: 'You fly to Berlin in May.',
+    status: 'answered',
+    sources: [{ noteId: '00000000-0000-4000-8000-0000000000aa', title: 'Berlin trip' }],
+  };
   /** What a successful retry produces. */
   analysisAfterRetry: FakeAnalysis = { status: 'ok', error: null, todos: 1, reminders: 0 };
   /** Analysis attached to notes created through the UI. */
@@ -79,6 +95,21 @@ export class FakeApi {
   constructor(initial: Partial<FakeNote>[] = []) {
     initial.forEach((n) => this.add(n));
     this.install();
+  }
+
+  addAsk(partial: Partial<FakeAsk> = {}): FakeAsk {
+    this.counter += 1;
+    const ask: FakeAsk = {
+      id: `30000000-0000-4000-8000-${String(this.counter).padStart(12, '0')}`,
+      question: `Question ${this.counter}`,
+      answer: `Answer ${this.counter}`,
+      status: 'answered',
+      createdAt: new Date((this.clock += 60_000)).toISOString(),
+      sources: [],
+      ...partial,
+    };
+    this.asks.push(ask);
+    return ask;
   }
 
   addReminder(partial: Partial<FakeReminder> = {}): FakeReminder {
@@ -206,6 +237,16 @@ export class FakeApi {
         analysis: this.analysisOnCreate,
       });
       return json({ note }, 201);
+    }
+    if (url === '/api/ask' && method === 'POST') {
+      if (typeof body?.question !== 'string' || !body.question.trim()) {
+        return apiError(422, 'VALIDATION_FAILED', 'Some of the information you sent is not valid.');
+      }
+      const ask = this.addAsk({ question: body.question, ...this.askResult });
+      return json({ ask }, 201);
+    }
+    if (url === '/api/ask/history' && method === 'GET') {
+      return json({ history: [...this.asks].reverse() });
     }
     if (url === '/api/reminders/due' && method === 'GET') {
       const now = Date.now();

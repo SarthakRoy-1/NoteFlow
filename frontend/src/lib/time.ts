@@ -35,6 +35,19 @@ export function toInputTime(iso: string, timeZone: string): string {
   }).format(new Date(iso));
 }
 
+/** When something happened, e.g. "9 Oct 2026, 14:05", in the user's timezone. */
+export function formatDateTime(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(LOCALE, {
+    timeZone,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(iso));
+}
+
 /** True when a due instant is already in the past. (Date-only dues are stored as end-of-day.) */
 export function isPast(iso: string, now: Date = new Date()): boolean {
   return new Date(iso).getTime() < now.getTime();

@@ -80,7 +80,7 @@ const badOutput = () =>
   );
 
 /** Models occasionally wrap JSON in a markdown fence even in JSON mode; strip only that. */
-function stripFence(text: string): string {
+export function stripFence(text: string): string {
   const trimmed = text.trim();
   const m = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
   return m?.[1] ?? trimmed;

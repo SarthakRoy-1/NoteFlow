@@ -28,6 +28,7 @@ export function AppShell() {
               </span>
             )}
           </NavLink>
+          <NavLink to="/ask">Ask AI</NavLink>
         </nav>
         <div className="shell-user">
           <span className="muted" title={user?.email}>
