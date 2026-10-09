@@ -1,13 +1,13 @@
 import { Link, NavLink } from 'react-router-dom';
 import { ApiError } from '../../lib/api';
+import { formatDateTime } from '../../lib/time';
+import { useMe } from '../auth/useAuth';
 import { useNotesList } from './useNotes';
-
-export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
 
 export function NoteList() {
   const { data, isPending, isError, error, refetch, isFetching } = useNotesList();
+  const { data: me } = useMe();
+  const timezone = me?.timezone ?? 'UTC';
 
   let body;
   if (isPending) {
@@ -52,7 +52,7 @@ export function NoteList() {
             >
               <span className="note-item-title">{note.title}</span>
               <span className="note-item-preview">{note.preview}</span>
-              <span className="note-item-date">{formatDate(note.updatedAt)}</span>
+              <span className="note-item-date">{formatDateTime(note.updatedAt, timezone)}</span>
             </NavLink>
           </li>
         ))}

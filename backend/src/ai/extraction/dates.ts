@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon';
+import type { ResolvedDue } from '../../lib/dueInput.js';
 import type { RawItem } from './schema.js';
 
 const WEEKDAYS = [
@@ -12,7 +13,8 @@ const WEEKDAYS = [
 ] as const;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
+// Hour 24 is refused: Luxon would read "T24:00" as the next day's midnight, silently moving the date.
+const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
 /** Wording that really states a time of day or a duration. "morning"/"tonight"/"sometime" do not. */
 const TIME_WORDING_RE = /\d|noon|midnight|\bhours?\b|\bhrs?\b|\bminutes?\b|\bmins?\b/i;
 
@@ -51,11 +53,6 @@ export function buildTimeContext(now: Date, timezone: string): string {
     lines.push(`- ${name}: ${fmt(upcoming)}; next ${name}: ${fmt(next)}`);
   });
   return lines.join('\n');
-}
-
-export interface ResolvedDue {
-  dueAt: Date | null;
-  dueHasTime: boolean;
 }
 
 const NO_DUE: ResolvedDue = { dueAt: null, dueHasTime: false };

@@ -192,6 +192,23 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
   not win by length alone. (5) Stale docs/comments about Gemini/Anthropic corrected.
   Deferred on purpose: ask history retention, 500-item list cap/pagination, session cleanup for other
   users, Todo/Reminder component dedup, vector search/embeddings/synonyms, a shared rate limiter.
+- Phase 7 date/time audit (verified by tests that assert stored UTC instants; no Gemini used):
+  Architecture found sound and unchanged: Luxon everywhere on the server, UTC `timestamptz`, the browser
+  sends local {date,time?} (never instants), shared lib/dueInput.ts for todos+reminders, Intl formatting in
+  the account timezone on the frontend. Verified: Asia/Kolkata 2026-10-09 17:00 -> 11:30Z (also the legacy id
+  Asia/Calcutta the dev account stores); 00:00/23:59 cross the UTC day correctly; date-only = no time
+  (todo: end of local day, reminder: start); America/New_York spring-forward day (23h) and fall-back day
+  (25h); gap time 02:30 -> 03:30 EDT; ambiguous 01:30 -> first (EDT) occurrence; leap day ok, 2027-02-29
+  refused; reminder alerts fire at the exact instant (07:30:00.000Z, not 1ms earlier) across a DST change;
+  "in two hours" is elapsed time. Account tz: set once at first sign-in from the browser, never overwritten,
+  invalid -> UTC, PATCH /me validated; raw timestamps/offsets/user_id in due payloads -> 422.
+  Bugs found and fixed: (1) note timestamps (list + detail) were formatted with the BROWSER's timezone and
+  locale by a second formatter (NoteList.formatDate); they now use the shared formatDateTime in the account
+  timezone. (2) AI-extracted "T24:00" was silently read by Luxon as the next day's midnight; hour 24 is now
+  rejected (the date is dropped, never guessed), matching the manual-entry rule. Also removed a duplicate
+  ResolvedDue type. Limitations: no timezone picker (a user whose first sign-in had no valid browser tz stays on
+  UTC until PATCH /me is used); a time inside the DST gap is stored as the shifted time and shown that way; the
+  second occurrence of a fall-back hour displays the same HH:mm as the first and re-saving it picks the first.
 - Phase 6 limitations: retrieval is keyword-based (stemming, no synonyms/typo tolerance, title not weighted);
   a question whose words appear in no note gets "not enough information" even if a paraphrase exists; only
   the top 5 notes (4,000 chars each) are considered; history is capped at 50 entries and cannot be deleted;

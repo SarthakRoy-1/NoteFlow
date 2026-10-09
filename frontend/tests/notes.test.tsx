@@ -36,6 +36,22 @@ describe('access', () => {
   });
 });
 
+describe('timestamps use the account timezone', () => {
+  it('shows note times in the user’s timezone (Europe/London), not the browser’s', async () => {
+    // 23:30 UTC on 1 July is 00:30 on 2 July in London (BST).
+    const iso = '2026-07-01T23:30:00.000Z';
+    const api = new FakeApi();
+    const note = api.add({ title: 'Summer note', createdAt: iso, updatedAt: iso });
+    renderAt(`/notes/${note.id}`);
+    expect(await screen.findByText(/Updated 2 Jul 2026, 00:30/)).toBeInTheDocument();
+    expect(screen.getByText(/Created 2 Jul 2026, 00:30/)).toBeInTheDocument();
+    // The list shows the same value.
+    expect(
+      await screen.findByText('2 Jul 2026, 00:30', { selector: '.note-item-date' }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('list states', () => {
   it('shows a loading state, then the empty state with a call to action', async () => {
     const api = new FakeApi();

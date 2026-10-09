@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../lib/api';
 import { AnalysisPanel } from './AnalysisPanel';
-import { formatDate } from './NoteList';
+import { formatDateTime } from '../../lib/time';
+import { useMe } from '../auth/useAuth';
 import { NoteForm } from './NoteForm';
 import { errorMessage, useDeleteNote, useNote, useUpdateNote } from './useNotes';
 
@@ -20,6 +21,7 @@ export function NoteDetailRoute() {
 
 function NoteDetail({ id }: { id: string }) {
   const { data: note, isPending, isError, error, refetch } = useNote(id);
+  const timezone = useMe().data?.timezone ?? 'UTC';
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const update = useUpdateNote(id);
@@ -80,7 +82,8 @@ function NoteDetail({ id }: { id: string }) {
       <BackLink />
       <h2>{note.title}</h2>
       <p className="muted note-meta">
-        Updated {formatDate(note.updatedAt)} · Created {formatDate(note.createdAt)}
+        Updated {formatDateTime(note.updatedAt, timezone)} · Created{' '}
+        {formatDateTime(note.createdAt, timezone)}
       </p>
       <p className="note-content">{note.content}</p>
       <AnalysisPanel noteId={note.id} analysis={note.analysis} />

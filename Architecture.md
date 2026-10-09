@@ -444,6 +444,23 @@ must be interpreted using the user's timezone.
 
 Canonical timestamps are stored consistently in PostgreSQL.
 
+### How it is implemented
+
+- The account timezone (`users.timezone`, an IANA id) is taken from the browser once, at the first
+  sign-in (`/api/auth/google?tz=`), validated, and never overwritten by later sign-ins. An invalid or
+  missing value stores `UTC`. `PATCH /api/me` can change it (there is no picker in the UI).
+- Everything is stored as UTC instants (`timestamptz`). The browser never sends instants: it sends the
+  user's local `{ date, time? }` and the server converts it with Luxon in the account timezone
+  (`backend/src/lib/dueInput.ts`, shared by todos and reminders). AI-extracted dates are resolved the same
+  way (`ai/extraction/dates.ts`): the model returns local wall-clock text, never an instant.
+- Date only: no time is invented (`due_has_time = false`). A todo is due at the END of that local day, a
+  reminder alerts at the START of it. No date: `due_at` is NULL (a reminder with none never alerts).
+- Daylight saving follows Luxon: a local time that does not exist (spring-forward gap) moves forward by the
+  gap (02:30 becomes 03:30); a local time that happens twice (fall back) takes its FIRST occurrence.
+  "In two hours" is real elapsed time from the server clock.
+- Display (`frontend/src/lib/time.ts`) converts instants back with `Intl.DateTimeFormat` in the account
+  timezone for due dates, note timestamps and Ask AI history. Overdue/due-now compare instants.
+
 ---
 
 ## Authentication and Authorization
