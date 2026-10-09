@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom';
 import { ApiError } from '../../lib/api';
+import { PlusIcon } from '../../components/icons';
 import { formatDateTime } from '../../lib/time';
 import { useMe } from '../auth/useAuth';
 import { useNotesList } from './useNotes';
@@ -65,6 +66,7 @@ export function NoteList() {
       <div className="pane-header">
         <h1>Notes</h1>
         <Link className="button button-primary" to="/notes/new">
+          <PlusIcon />
           New note
         </Link>
       </div>

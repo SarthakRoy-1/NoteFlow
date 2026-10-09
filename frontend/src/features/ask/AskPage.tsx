@@ -40,52 +40,57 @@ export function AskPage() {
         are listed with each answer.
       </p>
 
-      <form className="ask-form" onSubmit={submit} noValidate>
-        <div className="field">
-          <label htmlFor="ask-question">Your question</label>
-          <textarea
-            id="ask-question"
-            rows={3}
-            value={question}
-            onChange={(e) => {
-              setQuestion(e.target.value);
-              if (fieldError) setFieldError(null);
-            }}
-            disabled={ask.isPending}
-            aria-invalid={fieldError ? true : undefined}
-            aria-describedby={fieldError ? 'ask-question-error' : undefined}
-            placeholder="e.g. When is my Berlin trip?"
-          />
-          {fieldError && (
-            <span id="ask-question-error" className="field-error">
-              {fieldError}
-            </span>
+      <div className="ask-layout">
+        <div className="ask-main">
+          <form className="ask-form" onSubmit={submit} noValidate>
+            <div className="field">
+              <label htmlFor="ask-question" className="sr-only">
+                Your question
+              </label>
+              <textarea
+                id="ask-question"
+                rows={3}
+                value={question}
+                onChange={(e) => {
+                  setQuestion(e.target.value);
+                  if (fieldError) setFieldError(null);
+                }}
+                disabled={ask.isPending}
+                aria-invalid={fieldError ? true : undefined}
+                aria-describedby={fieldError ? 'ask-question-error' : undefined}
+                placeholder="Ask your notes anything. For example: When is my Berlin trip?"
+              />
+              {fieldError && (
+                <span id="ask-question-error" className="field-error">
+                  {fieldError}
+                </span>
+              )}
+            </div>
+            <div className="actions">
+              <button type="submit" className="button button-primary" disabled={ask.isPending}>
+                {ask.isPending ? 'Asking…' : 'Ask'}
+              </button>
+              <span className="muted">
+                {question.length}/{QUESTION_MAX}
+              </span>
+            </div>
+          </form>
+
+          {ask.isPending && (
+            <p className="ask-thinking" role="status">
+              Searching your notes and writing an answer…
+            </p>
           )}
+          {ask.isError && (
+            <p role="alert" className="alert alert-error">
+              {errorMessage(ask.error)}
+            </p>
+          )}
+
+          {selected && <AskAnswer ask={selected} timezone={timezone} />}
         </div>
-        <div className="actions">
-          <button type="submit" className="button button-primary" disabled={ask.isPending}>
-            {ask.isPending ? 'Asking…' : 'Ask'}
-          </button>
-          <span className="muted">
-            {question.length}/{QUESTION_MAX}
-          </span>
-        </div>
-      </form>
-
-      {ask.isPending && (
-        <p className="muted" role="status">
-          Searching your notes and writing an answer…
-        </p>
-      )}
-      {ask.isError && (
-        <p role="alert" className="alert alert-error">
-          {errorMessage(ask.error)}
-        </p>
-      )}
-
-      {selected && <AskAnswer ask={selected} timezone={timezone} />}
-
-      <AskHistory selectedId={selected?.id ?? null} onSelect={setSelected} timezone={timezone} />
+        <AskHistory selectedId={selected?.id ?? null} onSelect={setSelected} timezone={timezone} />
+      </div>
     </section>
   );
 }

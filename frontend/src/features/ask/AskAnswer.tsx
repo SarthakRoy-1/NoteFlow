@@ -6,11 +6,13 @@ import type { Ask } from './askApi';
 export function AskAnswer({ ask, timezone }: { ask: Ask; timezone: string }) {
   return (
     <article className="ask-answer" aria-label="Answer">
-      <p className="ask-label">Question</p>
+      <p className="sr-only">Question</p>
       <p className="ask-question">{ask.question}</p>
 
-      <p className="ask-label">Answer</p>
-      {ask.status === 'no_info' && <p className="badge">Not enough information in your notes</p>}
+      <p className="sr-only">Answer</p>
+      {ask.status === 'no_info' && (
+        <p className="badge ask-noinfo">Not enough information in your notes</p>
+      )}
       <p className="ask-answer-text">{ask.answer}</p>
 
       <p className="ask-label">Sources used</p>

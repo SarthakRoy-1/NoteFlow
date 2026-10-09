@@ -55,7 +55,7 @@ export function ReminderItem({ reminder, timezone }: { reminder: Reminder; timez
           ) : (
             <span className="todo-due">No time set</span>
           )}
-          {reminder.person && <span className="badge">For {reminder.person}</span>}
+          {reminder.person && <span className="badge badge-person">For {reminder.person}</span>}
           {reminder.createdByAi && <span className="badge">AI-created</span>}
           {handled && <span className="badge badge-done">Acknowledged</span>}
           <Link className="todo-source" to={`/notes/${reminder.sourceNote.id}`}>

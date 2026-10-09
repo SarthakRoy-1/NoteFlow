@@ -282,3 +282,64 @@ describe('delete', () => {
     expect(api.notes).toHaveLength(2);
   });
 });
+
+describe('what the AI created from a note', () => {
+  it('lists this note’s todos and reminders (and only this note’s) with their due information', async () => {
+    const api = new FakeApi();
+    const note = api.add({
+      title: 'Trip',
+      analysis: { status: 'ok', error: null, todos: 1, reminders: 1 },
+    });
+    const other = api.add({ title: 'Other' });
+    api.addTodo({
+      title: 'Book flights',
+      dueAt: '2026-10-09T22:59:59.999Z', // end of 9 Oct in London (BST)
+      dueHasTime: false,
+      sourceNote: { id: note.id, title: note.title },
+    });
+    api.addTodo({ title: 'Unrelated todo', sourceNote: { id: other.id, title: other.title } });
+    api.addReminder({
+      text: 'Call the hotel',
+      person: 'Sam',
+      dueAt: null,
+      sourceNote: { id: note.id, title: note.title },
+    });
+    renderAt(`/notes/${note.id}`);
+    const section = await screen.findByRole('region', { name: 'Created from this note' });
+    expect(within(section).getByText('Book flights')).toBeInTheDocument();
+    expect(within(section).getByText(/Due Fri, 9 Oct 2026$/)).toBeInTheDocument();
+    expect(within(section).getByText('Call the hotel')).toBeInTheDocument();
+    expect(within(section).getByText('For Sam')).toBeInTheDocument();
+    expect(within(section).getByText('No time set')).toBeInTheDocument();
+    expect(within(section).queryByText('Unrelated todo')).not.toBeInTheDocument();
+    expect(within(section).getByRole('link', { name: 'Todo' })).toHaveAttribute('href', '/todos');
+    expect(within(section).getByRole('link', { name: 'Reminder' })).toHaveAttribute(
+      'href',
+      '/reminders',
+    );
+  });
+
+  it('shows nothing extra when the AI created nothing from the note', async () => {
+    const api = new FakeApi();
+    const note = api.add({ title: 'Plain' });
+    renderAt(`/notes/${note.id}`);
+    expect(await screen.findByText(/found nothing in this note/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('region', { name: 'Created from this note' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows newly derived items after a retried analysis, without a page reload', async () => {
+    const api = new FakeApi();
+    const note = api.add({
+      title: 'Retry me',
+      analysis: { status: 'failed', error: 'The AI was busy.', todos: 0, reminders: 0 },
+    });
+    renderAt(`/notes/${note.id}`);
+    const retry = await screen.findByRole('button', { name: /retry analysis/i });
+    // The server creates a todo while analysing; the page must pick it up without a reload.
+    api.addTodo({ title: 'Found on retry', sourceNote: { id: note.id, title: note.title } });
+    await userEvent.click(retry);
+    expect(await screen.findByText('Found on retry')).toBeInTheDocument();
+  });
+});

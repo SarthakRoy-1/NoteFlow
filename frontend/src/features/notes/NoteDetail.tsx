@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { BackIcon } from '../../components/icons';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../lib/api';
 import { AnalysisPanel } from './AnalysisPanel';
+import { DerivedItems } from './DerivedItems';
 import { formatDateTime } from '../../lib/time';
 import { useMe } from '../auth/useAuth';
 import { NoteForm } from './NoteForm';
@@ -9,7 +11,8 @@ import { errorMessage, useDeleteNote, useNote, useUpdateNote } from './useNotes'
 
 const BackLink = () => (
   <Link to="/notes" className="back-link">
-    ← All notes
+    <BackIcon />
+    All notes
   </Link>
 );
 
@@ -57,7 +60,7 @@ function NoteDetail({ id }: { id: string }) {
     return (
       <div className="detail-pane">
         <BackLink />
-        <h2>Edit note</h2>
+        <h2 className="form-heading">Edit note</h2>
         <NoteForm
           initial={{ title: note.title, content: note.content }}
           submitLabel="Save changes"
@@ -87,6 +90,7 @@ function NoteDetail({ id }: { id: string }) {
       </p>
       <p className="note-content">{note.content}</p>
       <AnalysisPanel noteId={note.id} analysis={note.analysis} />
+      <DerivedItems noteId={note.id} />
 
       {remove.isError && (
         <p role="alert" className="alert alert-error">

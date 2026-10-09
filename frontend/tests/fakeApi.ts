@@ -57,6 +57,7 @@ export const testUser = {
   email: 'pat@example.com',
   name: 'Pat Person',
   timezone: 'Europe/London',
+  signIn: { password: false, google: true },
 };
 
 const json = (body: unknown, status = 200) =>
@@ -85,6 +86,13 @@ export class FakeApi {
   /** Analysis attached to notes created through the UI. */
   analysisOnCreate: FakeAnalysis = { status: 'ok', error: null, todos: 0, reminders: 0 };
   signedIn = true;
+  /** Whether the fake server can send email (GET /api/auth/config). */
+  emailEnabled = true;
+  /** Password accounts known to the fake sign-in/registration endpoints. */
+  accounts: { email: string; password: string; name: string }[] = [
+    { email: 'pat@example.com', password: 'correct horse battery', name: 'Pat Person' },
+  ];
+  me = { ...testUser };
   requests: { method: string; url: string; body?: unknown }[] = [];
   /** Per-"METHOD /path" override that returns a custom response once (or always if `sticky`). */
   private overrides = new Map<string, { make: () => Response; sticky: boolean }>();
@@ -209,10 +217,92 @@ export class FakeApi {
       return override.make();
     }
 
+    if (url === '/api/auth/login' && method === 'POST') {
+      const account = this.accounts.find((a) => a.email === String(body?.email).toLowerCase());
+      if (!account || account.password !== body?.password) {
+        return apiError(401, 'INVALID_CREDENTIALS', 'Email or password is incorrect.');
+      }
+      this.signedIn = true;
+      this.me = { ...testUser, email: account.email, name: account.name };
+      return json({ user: this.me });
+    }
+    if (url === '/api/auth/config') return json({ emailEnabled: this.emailEnabled });
+    if (url === '/api/auth/register' && method === 'POST') {
+      // Always the same generic answer, like the real server.
+      return json({ status: 'verification_sent' }, 202);
+    }
+    if (url === '/api/auth/resend-verification' || url === '/api/auth/forgot-password') {
+      return json({ status: 'sent' }, 202);
+    }
+    if (url === '/api/auth/verify-email' && method === 'POST') {
+      if (body?.token === 'expired-token-0000000000') {
+        return apiError(410, 'TOKEN_EXPIRED', 'This link has expired. Please request a new one.');
+      }
+      if (body?.token !== 'good-token-000000000000') {
+        return apiError(
+          400,
+          'TOKEN_INVALID',
+          'This link is not valid, or it has already been used.',
+        );
+      }
+      if (body?.password !== 'correct horse battery') {
+        return apiError(
+          401,
+          'PASSWORD_MISMATCH',
+          'That is not the password you chose when signing up.',
+        );
+      }
+      this.signedIn = true;
+      this.me = {
+        ...testUser,
+        email: 'new@example.com',
+        name: 'New Person',
+        signIn: { password: true, google: false },
+      };
+      return json({ user: this.me });
+    }
+    if (url === '/api/auth/reset-password' && method === 'POST') {
+      if (body?.token === 'expired-token-0000000000') {
+        return apiError(410, 'TOKEN_EXPIRED', 'This link has expired. Please request a new one.');
+      }
+      if (body?.token !== 'good-token-000000000000') {
+        return apiError(
+          400,
+          'TOKEN_INVALID',
+          'This link is not valid, or it has already been used.',
+        );
+      }
+      return json({ status: 'password_reset' });
+    }
     if (!this.signedIn && url !== '/api/auth/logout') {
       return apiError(401, 'UNAUTHENTICATED', 'Please sign in to continue.');
     }
-    if (url === '/api/me') return json({ user: testUser });
+    if (url === '/api/me' && method === 'PATCH') {
+      const tz = body?.timezone;
+      const valid =
+        typeof tz === 'string' &&
+        (tz === 'UTC' || tz.includes('/')) &&
+        Object.keys(body).length === 1 &&
+        (() => {
+          try {
+            new Intl.DateTimeFormat('en', { timeZone: tz });
+            return true;
+          } catch {
+            return false;
+          }
+        })();
+      if (!valid)
+        return apiError(422, 'VALIDATION_FAILED', 'Timezone must be a valid IANA identifier.');
+      this.me = { ...this.me, timezone: tz };
+      return json({ user: this.me });
+    }
+    if (url === '/api/auth/link/google/start' && method === 'POST') {
+      if (body?.password !== 'correct horse battery') {
+        return apiError(401, 'REAUTH_FAILED', 'That password is not correct.');
+      }
+      return json({ url: 'https://accounts.example.test/authorize?state=abc' });
+    }
+    if (url === '/api/me') return json({ user: this.me });
     if (url === '/api/auth/logout') {
       this.signedIn = false;
       return new Response(null, { status: 204 });

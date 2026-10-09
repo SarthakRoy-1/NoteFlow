@@ -1,3 +1,4 @@
+import { BackIcon } from '../../components/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import { NoteForm } from './NoteForm';
 import { errorMessage, useCreateNote } from './useNotes';
@@ -9,9 +10,10 @@ export function NewNote() {
   return (
     <div className="detail-pane">
       <Link to="/notes" className="back-link">
-        ← All notes
+        <BackIcon />
+        All notes
       </Link>
-      <h2>New note</h2>
+      <h2 className="form-heading">New note</h2>
       <NoteForm
         submitLabel="Save note"
         pending={create.isPending}

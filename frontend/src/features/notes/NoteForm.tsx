@@ -56,6 +56,7 @@ export function NoteForm({ initial, submitLabel, pending, error, onSubmit, onCan
           aria-describedby={errors.title ? `${titleId}-error` : undefined}
           disabled={pending}
           autoComplete="off"
+          placeholder="Untitled note"
         />
         {errors.title && (
           <p id={`${titleId}-error`} className="field-error">
@@ -67,7 +68,8 @@ export function NoteForm({ initial, submitLabel, pending, error, onSubmit, onCan
         <label htmlFor={contentId}>Note</label>
         <textarea
           id={contentId}
-          rows={10}
+          rows={12}
+          placeholder="Start writing. Mention a person, a date or something to remember and NoteFlow will pick it up."
           value={content}
           onChange={(e) => setContent(e.target.value)}
           aria-invalid={Boolean(errors.content)}

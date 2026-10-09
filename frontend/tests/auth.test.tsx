@@ -75,3 +75,39 @@ describe('auth UI', () => {
     expect(await screen.findByRole('link', { name: /sign in with google/i })).toBeInTheDocument();
   });
 });
+
+describe('session expiry while the app is open', () => {
+  it('sends the user to sign-in with a clear message when a request returns 401', async () => {
+    const api = new FakeApi();
+    api.add({ title: 'Private note' });
+    api.failNext('GET /api/notes', () =>
+      apiError(401, 'UNAUTHENTICATED', 'Please sign in to continue.'),
+    );
+    renderAt('/notes');
+    expect(await screen.findByRole('link', { name: /sign in with google/i })).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/session has ended/i);
+    // Nothing from the previous session stays on screen.
+    expect(screen.queryByText('Private note')).not.toBeInTheDocument();
+  });
+
+  it('also reacts to a 401 on a change (a save after the session ended)', async () => {
+    const api = new FakeApi();
+    const note = api.add({ title: 'Mine' });
+    renderAt(`/notes/${note.id}`);
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    api.failNext(`DELETE /api/notes/${note.id}`, () =>
+      apiError(401, 'UNAUTHENTICATED', 'Please sign in to continue.'),
+    );
+    await userEvent.click(await screen.findByRole('button', { name: /yes, delete/i }));
+    expect(await screen.findByRole('link', { name: /sign in with google/i })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/session has ended/i);
+  });
+
+  it('a normal error does not sign the user out', async () => {
+    const api = new FakeApi();
+    api.failNext('GET /api/notes', () => apiError(500, 'INTERNAL', 'Server trouble.'));
+    renderAt('/notes');
+    expect(await screen.findByText(/server trouble/i)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /sign in with google/i })).not.toBeInTheDocument();
+  });
+});

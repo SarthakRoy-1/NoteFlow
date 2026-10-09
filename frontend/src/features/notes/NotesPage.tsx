@@ -17,6 +17,7 @@ export function NotesPage() {
 export function NoNoteSelected() {
   return (
     <div className="detail-pane detail-empty">
+      <p className="detail-empty-title">Pick up where you left off.</p>
       <p className="muted">Select a note to read it, or create a new one.</p>
     </div>
   );
