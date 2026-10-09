@@ -22,3 +22,6 @@ Thumbs.db
 
 # claude local
 .claude/
+
+# graphify generated output
+graphify-out/

@@ -209,6 +209,21 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
   ResolvedDue type. Limitations: no timezone picker (a user whose first sign-in had no valid browser tz stays on
   UTC until PATCH /me is used); a time inside the DST gap is stored as the shifted time and shown that way; the
   second occurrence of a fall-back hour displays the same HH:mm as the first and re-saving it picks the first.
+- Frontend visual polish (impeccable + Emil Kowalski principles; CSS only, no markup/behaviour change):
+  todo/reminder rows are content-first with quiet inline actions (stacked on phones, 40px targets);
+  `--color-on-accent` fixes low-contrast text on the pale dark-theme primary/danger fills; buttons got
+  hover (pointer devices only) and a 0.97 press state; native controls/selection follow the theme
+  (`color-scheme`, `accent-color`, `::selection`); tabular numerals on dates/counts; the due-alert banner
+  eases in (respects prefers-reduced-motion). Checked in a real browser at desktop dark, mobile light.
+  Not done: PRODUCT.md (impeccable init) and the `taste` skill (needs a reference site URL).
+- Frontend completion batch (no Gemini; real backend + scripted AI only for browser checks):
+  (1) Session expiry: a 401 from any query/mutation while signed in clears cached private data and sends the
+  user to /login?error=session_expired with a clear message (RequireAuth). Checked against the real backend by
+  deleting the session row. (2) Note page lists the todos/reminders created from it (DerivedItems); note
+  create/edit/retry/delete now refresh the todo and reminder caches. (3) /settings: account time zone
+  (PATCH /me), linked from the account name in the header; a "use this device's zone" shortcut; saving
+  re-renders every date. Intl lists Asia/Calcutta (not Asia/Kolkata); both are valid for the backend.
+  (4) Login page styled and explained. Taste skill reference analysis still pending (needs a reference URL).
 - Phase 6 limitations: retrieval is keyword-based (stemming, no synonyms/typo tolerance, title not weighted);
   a question whose words appear in no note gets "not enough information" even if a paraphrase exists; only
   the top 5 notes (4,000 chars each) are considered; history is capped at 50 entries and cannot be deleted;
@@ -230,7 +245,7 @@ The Gemini provider is integrated (AIProvider -> GeminiProvider -> Gemini API, u
 - Node.js + Express + TypeScript is the backend stack.
 - PostgreSQL is the database.
 - Drizzle ORM is used for database access and migrations.
-- Google OAuth is the only authentication method required by the assignment.
+- Google OAuth is the authentication method required by the assignment. Email/password was added later by change request (see "Email/password authentication" below).
 - Sessions are server-managed and authenticated requests derive the user from the session.
 - User-owned data must always be scoped by authenticated user ownership.
 - Gemini is the selected AI provider for this implementation.
@@ -357,3 +372,22 @@ Optional bonus work should only begin after all mandatory core and "Should have"
 8. Keep entries concise and factual.
 9. Preserve historical decisions when they matter.
 10. The latest state in this file must reflect the actual repository state.
+
+## Frontend redesign (warm paper-and-ink)
+
+- Direction and tokens are documented in `Design.md` and `PRODUCT.md`; colours live in `frontend/src/styles/tokens.css` as `light-dark()` pairs, the theme control (System/Light/Dark, `lib/theme.ts`) only sets `color-scheme`.
+- Fonts are self-hosted (`@fontsource-variable/newsreader`, `@fontsource-variable/instrument-sans`).
+- Layout: sidebar + note list + writing pane; phones use a bottom tab bar and one Notes pane at a time.
+- Verified with scripted-AI sample data; zero Gemini requests. Live Gemini verification is still a separate step.
+
+## Email/password authentication, verification, linking and recovery
+
+- Auth routes: `backend/src/auth/password.routes.ts` (register, resend-verification, verify-email, login, forgot-password, reset-password, GET /config), `auth/link.routes.ts` (Connect Google), shared token/DB helpers in `auth/accountTokens.ts`, hashing in `auth/password.ts` (Argon2id, 19 MiB / 2 passes / 1 lane, NFKC). Email: `backend/src/email/` (`EmailSender`; Resend over fetch, or SMTP via nodemailer for Gmail App Passwords; unconfigured sender throws `not_configured`). Env: `EMAIL_PROVIDER=smtp` + `SMTP_HOST/PORT/SECURE/USER/PASS` + `EMAIL_FROM`, or `RESEND_API_KEY` + `EMAIL_FROM`. An explicit `EMAIL_PROVIDER` with missing variables keeps email off and logs a startup warning naming the missing variables (never values); no provider means email features are off. SMTP errors are reduced to a kind, never logged or forwarded.
+- **Sign-up never creates an account until verified.** `POST /register` stores a `pending_registrations` row (email, name, Argon2id hash, token hash, 24 h expiry) and emails a link `…/verify-email#token=…` (token in the fragment so it is never sent to servers or Referer). The pending row is not an account, cannot sign in, and does not reserve the address, so it can never block the real owner's Google sign-in. Latest sign-up for an address replaces the earlier one. Responses are identical for new and already-registered addresses (an existing owner gets an "already have an account" email instead).
+- `POST /verify-email` needs the token AND the password chosen at sign-up (so an attacker who overwrites a victim's pending record cannot get the victim to complete it). The pending row is deleted and the user inserted in one transaction (single use, race-safe); the user is created with `email_verified_at`. Per-token and per-IP attempt limits apply.
+- `requireAuth` returns 403 `EMAIL_NOT_VERIFIED` for any user without `email_verified_at` (defence in depth; only pre-0003 password accounts can be in that state). Those accounts can verify through resend-verification (`user_tokens`, purpose `verify_email`) or a password reset.
+- **Recovery:** `forgot-password` (generic 202; only password accounts get a link) and `reset-password` (token hash, 1 h, single use). A reset sets the password, marks the email verified, and deletes every session of the account. No automatic sign-in after reset.
+- **Linking Google:** `POST /api/auth/link/google/start` (signed in + password re-entered) stores a one-time hashed OAuth state in `oauth_link_attempts`, bound to the user and the exact session (deleting the session deletes the attempt). Google redirects to the existing `/api/auth/google/callback`, which first checks whether `state` is a stored link attempt, consumes it atomically, requires the same user and session, a verified Google email, and a Google identity not linked elsewhere, then sets `google_sub` on that one account. Results land on `/settings?link=ok|<error>`. A Google sign-in for an email owned by a password account is refused (`?error=email_in_use`), never merged.
+- Migrations: `0002_email_password_auth` (nullable `google_sub`, `password_hash`, auth-method check, `lower(email)` unique) and `0003_email_verification_linking_recovery` (`users.email_verified_at`, `pending_registrations`, `user_tokens`, `oauth_link_attempts`; backfills `email_verified_at` for accounts with a Google identity). Both additive. Rollback is manual SQL (drop the new tables/column; restore `google_sub NOT NULL` only if no password-only users exist).
+- Rate limits are per process: sign-up/resend 5/h/IP, 3 emails/h/address, login 20/15 min/IP and 8/15 min/email, forgot 5/h/IP, token submissions 20/15 min/IP and 5/15 min/token, link start 5/15 min/user.
+- Limitations: real email delivery and real Google linking have not been exercised (fake providers in tests); no CAPTCHA or breached-password check; Google-only accounts cannot add a password; pre-0003 password accounts that were never verified still hold their email until verified or reset.

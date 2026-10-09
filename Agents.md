@@ -270,9 +270,9 @@ An AI failure must not cause an otherwise valid saved note to disappear.
 
 Authentication establishes identity.
 
-Google OAuth is the required authentication mechanism.
+Google OAuth is the required authentication mechanism. Email/password sign-in was added later at the project owner's explicit request and exists alongside it.
 
-Do not introduce a separate email/password authentication flow unless the assignment is explicitly changed.
+Passwords are hashed with Argon2id and never stored or logged in plaintext. Never merge a Google account and a password account because their email strings match; connecting them is an explicit, re-authenticated action. An unverified sign-up must never reserve an email address.
 
 ## Authorization
 

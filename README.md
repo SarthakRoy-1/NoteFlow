@@ -1,7 +1,7 @@
 # NoteFlow
 
 AI notes, todos and reminders. Write notes in plain language; an AI model extracts todos and
-reminders, and you can ask questions about your notes. Sign-in is Google OAuth only.
+reminders, and you can ask questions about your notes. Sign in with Google or with an email and password.
 
 **Status:** Phases 0-6 done (foundation, auth, notes CRUD, AI intent extraction, todos, reminders, Ask AI). Phase 3's
 live Gemini check is still pending (see `Memory.md`). The rest arrives in later phases (see `Phases.md`; progress in
@@ -37,6 +37,9 @@ cp .env.example .env     # then fill in the values (see below)
 | `DATABASE_URL`                          | Dev database, e.g. `postgres://noteflow:<password>@localhost:5432/noteflow` |
 | `TEST_DATABASE_URL`                     | **Separate** test database; the name must end in `_test`             |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | Google OAuth client (see below) |
+| `EMAIL_PROVIDER` (`smtp` or `resend`), `EMAIL_FROM` | Which sender delivers verification and reset mail. Without a complete provider those features are switched off in the UI and the API returns 503 (Google sign-in is unaffected). An explicit provider with missing variables leaves email off and logs a warning naming the missing variables (never values) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | SMTP sender. Gmail: `smtp.gmail.com`, `465`, `true`, your Gmail address, and a Google [App Password](https://myaccount.google.com/apppasswords) (needs 2-Step Verification). No domain required |
+| `RESEND_API_KEY` | Resend sender (needs a domain-verified `EMAIL_FROM`) |
 | `GEMINI_API_KEY` / `GEMINI_MODEL`       | Gemini API key and model name (backend-only; the model is never hardcoded). If either is missing the app still runs and shows "AI analysis is not set up" on saved notes |
 
 Generate secrets:

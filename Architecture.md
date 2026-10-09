@@ -54,7 +54,7 @@ The Gemini API key is backend-only and must never be exposed to the browser.
 User
   │
   ▼
-Google OAuth
+Google OAuth  or  Email + password (Argon2id, email verified by one-time link)
   │
   ▼
 Authenticated Session

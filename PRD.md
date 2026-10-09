@@ -152,8 +152,10 @@ This is not initially intended to be:
 
 ### Authentication
 
-- Google OAuth only.
-- No email/password authentication.
+- Google OAuth.
+- Email/password registration and sign-in (added by change request; Argon2id, rate limited). A sign-up is only a pending record until the owner opens an emailed one-time link and re-enters the password they chose; it never reserves the address.
+- Password reset by emailed one-time link (ends all sessions). Both need an email provider (Resend or SMTP, e.g. Gmail with an App Password); without one the features are switched off, not faked.
+- Google and password accounts are never merged automatically on email alone. A signed-in password user can connect Google from Settings after re-entering their password.
 - Logout.
 - Protected backend APIs.
 - Server-side authorization.
