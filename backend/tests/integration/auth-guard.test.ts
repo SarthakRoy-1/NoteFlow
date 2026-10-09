@@ -67,6 +67,7 @@ describe('requireAuth', () => {
       email: 'a@example.com',
       name: 'a',
       timezone: 'UTC',
+      signIn: { password: false, google: true },
     });
     expect(resB.body.user.id).toBe(b.user.id);
   });

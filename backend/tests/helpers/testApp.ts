@@ -1,17 +1,22 @@
 import { eq, sql } from 'drizzle-orm';
 import { createApp } from '../../src/app.js';
+import type { PasswordAuthLimiters } from '../../src/auth/password.routes.js';
+import { EmailDeliveryError, type EmailMessage, type EmailSender } from '../../src/email/types.js';
+import { createRateLimiter } from '../../src/lib/rateLimit.js';
 import type { AIProvider } from '../../src/ai/provider/index.js';
 import type { GoogleAuth, GoogleIdentity, OAuthChecks } from '../../src/auth/google.js';
+import { hashPassword } from '../../src/auth/password.js';
 import { createSession, hashToken } from '../../src/auth/sessions.js';
 import { SESSION_COOKIE } from '../../src/auth/cookies.js';
 import { parseEnv, type Env } from '../../src/config/env.js';
 import { createDb } from '../../src/db/client.js';
-import { sessions, users } from '../../src/db/schema.js';
+import { pendingRegistrations, sessions, users } from '../../src/db/schema.js';
 import { loadDotenv } from '../../src/loadDotenv.js';
 import { assertSafeTestDatabase } from './safety.js';
 import { FakeAI } from './fakeAi.js';
 
 export { FakeAI };
+export const PASSWORD = 'a long enough password';
 /** Fixed clock for every AI/date test: Thursday 8 Oct 2026, 10:00 UTC. */
 export const FIXED_NOW = new Date('2026-10-08T10:00:00Z');
 
@@ -40,7 +45,8 @@ export type TestDb = ReturnType<typeof openTestDb>['db'];
 
 /** Remove all rows. Every table references users, so one cascading TRUNCATE clears everything. */
 export async function resetDb(db: TestDb) {
-  await db.execute(sql`truncate table ${users} restart identity cascade`);
+  // pending_registrations is the one table with no foreign key to users.
+  await db.execute(sql`truncate table ${users}, ${pendingRegistrations} restart identity cascade`);
 }
 
 export async function createUserWithSession(
@@ -55,6 +61,7 @@ export async function createUserWithSession(
       email,
       name: email.split('@')[0] ?? 'user',
       timezone: opts.timezone ?? 'UTC',
+      emailVerifiedAt: new Date(),
     })
     .returning();
   if (!user) throw new Error('failed to create test user');
@@ -68,6 +75,27 @@ export async function createUserWithSession(
       .where(eq(sessions.id, hashToken(token)));
   }
   return { user, token, cookie: `${SESSION_COOKIE}=${token}`, expiresAt };
+}
+
+/** A password account (and a session for it). `verified: false` mimics an account from before email verification. */
+export async function createPasswordUserWithSession(
+  db: TestDb,
+  opts: { email?: string; password?: string; verified?: boolean; timezone?: string } = {},
+) {
+  const email = opts.email ?? 'pat@example.com';
+  const [user] = await db
+    .insert(users)
+    .values({
+      email,
+      name: email.split('@')[0] ?? 'user',
+      timezone: opts.timezone ?? 'UTC',
+      passwordHash: await hashPassword(opts.password ?? PASSWORD),
+      emailVerifiedAt: opts.verified === false ? null : new Date(),
+    })
+    .returning();
+  if (!user) throw new Error('failed to create test user');
+  const { token } = await createSession(db, user.id, 14);
+  return { user, token, cookie: `${SESSION_COOKIE}=${token}` };
 }
 
 /** Test double for Google. The app code path (cookies, state check, user upsert, session) is real. */
@@ -101,11 +129,58 @@ export class FakeGoogle implements GoogleAuth {
   }
 }
 
+/** Effectively unlimited, so ordinary tests never trip the sign-in limits (rate-limit tests pass their own). */
+export function generousAuthLimiters(): PasswordAuthLimiters {
+  const limiter = () =>
+    createRateLimiter({ limit: 10_000, windowMs: 60_000, now: () => new Date() });
+  return {
+    register: limiter(),
+    loginIp: limiter(),
+    loginEmail: limiter(),
+    emailSend: limiter(),
+    forgotIp: limiter(),
+    tokenIp: limiter(),
+    tokenAttempts: limiter(),
+    link: limiter(),
+  };
+}
+
+/** Records every message instead of sending it; tests read the one-time link out of the text. */
+export class FakeEmail implements EmailSender {
+  configured = true;
+  sent: EmailMessage[] = [];
+  /** Make the next sends fail like a provider outage. */
+  failWith: EmailDeliveryError | undefined;
+
+  async send(message: EmailMessage) {
+    if (this.failWith) throw this.failWith;
+    this.sent.push(message);
+  }
+
+  to(address: string) {
+    return this.sent.filter((m) => m.to === address);
+  }
+
+  /** The token in the last link sent to `address`. */
+  lastToken(address: string): string {
+    const text = this.to(address).at(-1)?.text ?? '';
+    const match = /#token=([A-Za-z0-9_-]+)/.exec(text);
+    if (!match?.[1]) throw new Error(`no link was emailed to ${address}`);
+    return match[1];
+  }
+}
+
 export function buildApp(
   db: TestDb,
   env = testEnv(),
   google?: FakeGoogle,
-  extra: { ai?: AIProvider; now?: () => Date; aiCallsPerMinute?: number } = {},
+  extra: {
+    ai?: AIProvider;
+    now?: () => Date;
+    aiCallsPerMinute?: number;
+    authLimiters?: PasswordAuthLimiters;
+    email?: EmailSender;
+  } = {},
 ) {
   return createApp({
     env,
@@ -114,5 +189,7 @@ export function buildApp(
     ai: extra.ai ?? new FakeAI(),
     now: extra.now ?? (() => FIXED_NOW),
     aiCallsPerMinute: extra.aiCallsPerMinute,
+    authLimiters: extra.authLimiters ?? generousAuthLimiters(),
+    email: extra.email ?? new FakeEmail(),
   });
 }

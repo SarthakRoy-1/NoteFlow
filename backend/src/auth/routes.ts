@@ -6,7 +6,7 @@ import type { Db } from '../db/client.js';
 import { AppError } from '../lib/errors.js';
 import { isValidIanaTimezone } from '../lib/timezone.js';
 import { logger } from '../lib/logger.js';
-import { upsertGoogleUser } from '../modules/users/users.repo.js';
+import { isUniqueViolation, upsertGoogleUser } from '../modules/users/users.repo.js';
 import {
   OAUTH_COOKIE,
   SESSION_COOKIE,
@@ -16,13 +16,16 @@ import {
 } from './cookies.js';
 import type { GoogleAuth } from './google.js';
 import { authNotConfigured } from './google.js';
-import { createSession, deleteSession } from './sessions.js';
+import { consumeLinkAttempt, deletePendingForEmail } from './accountTokens.js';
+import { finishGoogleLink } from './link.routes.js';
+import { createSession, deleteSession, hashToken } from './sessions.js';
 
 export interface AuthRouterDeps {
   env: Env;
   db: Db;
   /** Lazily resolved so a missing Google config is reported per request, not at boot. */
   getGoogle: () => GoogleAuth;
+  now?: () => Date;
 }
 
 const oauthPayload = z.object({
@@ -38,7 +41,7 @@ const safeEqual = (a: string, b: string) => {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 };
 
-export function authRouter({ env, db, getGoogle }: AuthRouterDeps) {
+export function authRouter({ env, db, getGoogle, now = () => new Date() }: AuthRouterDeps) {
   const router = Router();
 
   const loginUrl = (error: string) =>
@@ -70,6 +73,29 @@ export function authRouter({ env, db, getGoogle }: AuthRouterDeps) {
   // Step 2: Google redirects back here with ?code&state (or ?error).
   router.get('/google/callback', async (req, res) => {
     try {
+      // Rebuild the callback URL from the configured redirect URI so proxies cannot alter it.
+      const buildCallbackUrl = () => {
+        const redirectUri = env.GOOGLE_REDIRECT_URI;
+        if (!redirectUri) throw authNotConfigured();
+        const url = new URL(redirectUri);
+        url.search = new URL(req.originalUrl, 'http://placeholder.invalid').search;
+        return url;
+      };
+
+      // "Connect Google" attempts share this redirect URI; their one-time state is stored server-side.
+      if (typeof req.query.state === 'string') {
+        const attempt = await consumeLinkAttempt(db, hashToken(req.query.state), now());
+        if (attempt) {
+          return await finishGoogleLink(
+            { env, db, getGoogle, now },
+            req,
+            res,
+            attempt,
+            buildCallbackUrl,
+          );
+        }
+      }
+
       if (typeof req.query.error === 'string') return failLogin(res, 'access_denied');
 
       const raw: unknown = req.signedCookies?.[OAUTH_COOKIE];
@@ -85,20 +111,24 @@ export function authRouter({ env, db, getGoogle }: AuthRouterDeps) {
       }
 
       const google = getGoogle();
-      const redirectUri = env.GOOGLE_REDIRECT_URI;
-      if (!redirectUri) throw authNotConfigured();
-      // Rebuild the callback URL from the configured redirect URI so proxies cannot alter it.
-      const callbackUrl = new URL(redirectUri);
-      callbackUrl.search = new URL(req.originalUrl, 'http://placeholder.invalid').search;
-
-      const identity = await google.completeAuthorization(callbackUrl, {
+      const identity = await google.completeAuthorization(buildCallbackUrl(), {
         state: payload.data.state,
         codeVerifier: payload.data.codeVerifier,
         nonce: payload.data.nonce,
       });
       if (!identity.emailVerified) return failLogin(res, 'email_unverified');
 
-      const user = await upsertGoogleUser(db, identity, payload.data.tz ?? 'UTC');
+      let user;
+      try {
+        user = await upsertGoogleUser(db, identity, payload.data.tz ?? 'UTC');
+      } catch (err) {
+        // The email already belongs to another (e.g. password) account. We never merge on email alone.
+        if (isUniqueViolation(err)) return failLogin(res, 'email_in_use');
+        throw err;
+      }
+      await deletePendingForEmail(db, user.email); // an unverified sign-up for it is now moot
+      const previous: unknown = req.cookies?.[SESSION_COOKIE];
+      if (typeof previous === 'string' && previous !== '') await deleteSession(db, previous);
       const { token, expiresAt } = await createSession(db, user.id, env.SESSION_TTL_DAYS);
 
       res.clearCookie(OAUTH_COOKIE, clearOptions(oauthCookieOptions(env)));

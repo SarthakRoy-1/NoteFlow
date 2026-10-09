@@ -14,6 +14,9 @@ export function requireAuth(db: Db): RequestHandler {
       if (typeof token !== 'string' || token === '') throw unauthenticated();
       const user = await findUserByToken(db, token);
       if (!user) throw unauthenticated();
+      if (!user.emailVerifiedAt) {
+        throw new AppError('EMAIL_NOT_VERIFIED', 403, 'Please confirm your email address first.');
+      }
       req.user = user;
       next();
     } catch (err) {

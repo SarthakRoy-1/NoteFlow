@@ -21,6 +21,17 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: optionalString,
   GOOGLE_CLIENT_SECRET: optionalString,
   GOOGLE_REDIRECT_URI: optionalString,
+  // Transactional email. EMAIL_PROVIDER picks the sender; when unset it is `resend` if
+  // RESEND_API_KEY is present. Without a complete provider (see createEmailSender), sign-up by
+  // email and password recovery are switched off rather than faked.
+  EMAIL_PROVIDER: z.enum(['resend', 'smtp']).optional(),
+  EMAIL_FROM: optionalString,
+  RESEND_API_KEY: optionalString,
+  SMTP_HOST: optionalString,
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+  SMTP_SECURE: z.enum(['true', 'false']).optional(),
+  SMTP_USER: optionalString,
+  SMTP_PASS: optionalString,
   // Backend-only. The model name is configuration, never hardcoded in application logic.
   GEMINI_API_KEY: optionalString,
   GEMINI_MODEL: optionalString,

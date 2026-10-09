@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   foreignKey,
   index,
   integer,
@@ -24,16 +25,99 @@ export const analysisStatus = pgEnum('analysis_status', ['pending', 'ok', 'faile
 export const reminderStatus = pgEnum('reminder_status', ['pending', 'acknowledged', 'dismissed']);
 export const itemKind = pgEnum('item_kind', ['todo', 'reminder']);
 export const askStatus = pgEnum('ask_status', ['answered', 'no_info', 'failed']);
+export const userTokenPurpose = pgEnum('user_token_purpose', ['verify_email', 'reset_password']);
 
-export const users = pgTable('users', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  googleSub: text('google_sub').notNull().unique(),
-  email: text('email').notNull(),
-  name: text('name').notNull(),
-  timezone: text('timezone').notNull().default('UTC'),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+/**
+ * An account signs in with Google (`google_sub`), a password (`password_hash`, Argon2id PHC string),
+ * or both. The two are never merged automatically just because the email matches.
+ * One email = one account, compared case-insensitively.
+ */
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    googleSub: text('google_sub').unique(),
+    passwordHash: text('password_hash'),
+    /** Set only after the owner proved control of the address (Google-verified, or an emailed link). */
+    emailVerifiedAt: timestamptz('email_verified_at'),
+    email: text('email').notNull(),
+    name: text('name').notNull(),
+    timezone: text('timezone').notNull().default('UTC'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('users_email_lower_unique').on(sql`lower(${t.email})`),
+    check(
+      'users_auth_method_check',
+      sql`${t.googleSub} is not null or ${t.passwordHash} is not null`,
+    ),
+  ],
+);
+
+/**
+ * A sign-up that has not proven its email yet. It is NOT an account: it cannot sign in, and it does
+ * not reserve the address against a real account (the unique index is on this table only), so
+ * nobody can lock the legitimate owner out of Google sign-in. Only the hash of the emailed token
+ * is stored. Rows expire and are purged.
+ */
+export const pendingRegistrations = pgTable(
+  'pending_registrations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: text('email').notNull(),
+    name: text('name').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    timezone: text('timezone').notNull().default('UTC'),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamptz('expires_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('pending_registrations_email_lower_unique').on(sql`lower(${t.email})`),
+    index('pending_registrations_expires_at_idx').on(t.expiresAt),
+  ],
+);
+
+/** One-time emailed tokens for an existing account (hash only; single use; expiring). */
+export const userTokens = pgTable(
+  'user_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    purpose: userTokenPurpose('purpose').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamptz('expires_at').notNull(),
+    usedAt: timestamptz('used_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('user_tokens_user_id_idx').on(t.userId)],
+);
+
+/**
+ * One in-flight "connect Google" attempt. Bound to the account AND the exact session that started
+ * it (deleting the session deletes the attempt). `state_hash` is the one-time OAuth state, hashed.
+ */
+export const oauthLinkAttempts = pgTable(
+  'oauth_link_attempts',
+  {
+    stateHash: text('state_hash').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    codeVerifier: text('code_verifier').notNull(),
+    nonce: text('nonce').notNull(),
+    expiresAt: timestamptz('expires_at').notNull(),
+    usedAt: timestamptz('used_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('oauth_link_attempts_expires_at_idx').on(t.expiresAt)],
+);
 
 /** `id` is the SHA-256 hash of the session token. The raw token only ever lives in the cookie. */
 export const sessions = pgTable(

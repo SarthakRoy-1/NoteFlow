@@ -1,5 +1,12 @@
 export type ErrorCode =
-  'BAD_REQUEST' | 'UNAUTHENTICATED' | 'NOT_FOUND' | 'VALIDATION_FAILED' | 'INTERNAL';
+  | 'BAD_REQUEST'
+  | 'UNAUTHENTICATED'
+  | 'NOT_FOUND'
+  | 'VALIDATION_FAILED'
+  | 'INVALID_CREDENTIALS'
+  | 'EMAIL_IN_USE'
+  | 'RATE_LIMITED'
+  | 'INTERNAL';
 
 /** An error whose message is safe to show to the end user. */
 export class AppError extends Error {
