@@ -172,6 +172,22 @@ describe('reminder rendering', () => {
   });
 });
 
+describe('a reminder coming due while the page is open', () => {
+  it('moves from Upcoming to Due now at its time, without a reload', async () => {
+    const api = new FakeApi();
+    api.addReminder({ text: 'About to be due', dueAt: inMs(1500) });
+    renderAt('/reminders');
+    const upcoming = await screen.findByRole('region', { name: 'Upcoming' });
+    expect(within(upcoming).getByText('About to be due')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Due now' })).toBeNull();
+
+    // The alert query wakes up exactly at the due time and the page regroups itself.
+    const dueNow = await screen.findByRole('region', { name: 'Due now' }, { timeout: 8000 });
+    expect(within(dueNow).getByText('About to be due')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Upcoming' })).toBeNull();
+  }, 15_000);
+});
+
 describe('acknowledging', () => {
   it('"Got it" acknowledges with a PATCH and moves the reminder to Acknowledged', async () => {
     const api = new FakeApi();

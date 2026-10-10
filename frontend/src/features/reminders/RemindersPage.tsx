@@ -4,7 +4,7 @@ import { useMe } from '../auth/useAuth';
 import { SharedWithYou } from '../shares/SharedWithYou';
 import { ReminderItem, isReminderDue } from './ReminderItem';
 import type { Reminder } from './remindersApi';
-import { useReminders } from './useReminders';
+import { useDueReminders, useReminders } from './useReminders';
 
 function Section({
   title,
@@ -33,6 +33,9 @@ function Section({
 export function RemindersPage() {
   const { data: me } = useMe();
   const { data, isPending, isError, error, refetch, isFetching } = useReminders();
+  // Subscribing to the alert query re-renders this page at the moment a reminder comes due, so it
+  // moves from "Upcoming" to "Due now" without waiting for a refocus or a reload.
+  useDueReminders();
   const timezone = me?.timezone ?? 'UTC';
 
   let body;
