@@ -1,7 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { errorMessage } from '../notes/useNotes';
-import { registerPushSubscription, removePushSubscription } from './notificationsApi';
+import {
+  lookupPushSubscription,
+  registerPushSubscription,
+  removePushSubscription,
+} from './notificationsApi';
 import {
   PushError,
   currentSubscription,
@@ -32,8 +36,11 @@ export function NotificationSettings() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const pushAvailable = data?.push.available === true;
+  const hasDevices = (data?.push.subscriptions.length ?? 0) > 0;
 
-  // Work out this browser's state without ever asking for permission.
+  // Work out whether THIS account has this browser as a device. Browser permission is browser-wide
+  // and proves nothing about the account, so this only asks the server (read-only): it never
+  // asks for permission and never registers or moves a subscription.
   useEffect(() => {
     if (!data) return;
     if (!pushSupported()) {
@@ -50,9 +57,8 @@ export function NotificationSettings() {
       if (permission() !== 'granted') return set({ kind: 'off' });
       const subscription = await currentSubscription();
       if (!subscription) return set({ kind: 'off' });
-      // Tell the server about it again: this also renews keys the browser rotated.
-      const { id } = await registerPushSubscription(subscriptionPayload(subscription));
-      set({ kind: 'on', id });
+      const { id } = await lookupPushSubscription(subscription.endpoint);
+      set(id ? { kind: 'on', id } : { kind: 'off' });
     })().catch(() => set({ kind: 'off' }));
     return () => {
       cancelled = true;
@@ -148,7 +154,7 @@ export function NotificationSettings() {
                   {problem}
                 </p>
               )}
-              {pushAvailable && (
+              {pushAvailable && hasDevices && (
                 <>
                   <label className="check-row">
                     <input
@@ -247,7 +253,10 @@ function PushState({
       >
         {busy ? 'Working…' : 'Enable notifications on this device'}
       </button>
-      <p className="muted">Your browser will ask for permission.</p>
+      <p className="muted">
+        Your browser may ask for permission. A browser&apos;s notifications belong to one NoteFlow
+        account at a time, so turning them on here takes them over from any other account.
+      </p>
     </div>
   );
 }

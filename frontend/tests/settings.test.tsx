@@ -34,6 +34,23 @@ describe('account time zone', () => {
     expect(await zone()).toHaveValue('Europe/London');
   });
 
+  it('is also reachable from the gear button, which goes to the same page', async () => {
+    new FakeApi();
+    renderAt('/notes');
+    const gear = await screen.findByRole('link', { name: 'Settings' });
+    expect(gear).toHaveAttribute('href', '/settings');
+    expect(screen.getByRole('link', { name: 'Pat Person' })).toHaveAttribute('href', '/settings');
+    await userEvent.click(gear);
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument();
+    // Navigating is not signing out, and both controls mark the page as current.
+    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Pat Person' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
   it('keeps a saved zone selectable even when the browser’s list omits it (it lists Asia/Calcutta, not Asia/Kolkata)', async () => {
     const api = new FakeApi();
     api.me.timezone = 'Asia/Kolkata';

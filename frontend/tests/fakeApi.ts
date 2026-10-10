@@ -374,6 +374,10 @@ export class FakeApi {
       if (body.pushShowText !== undefined) n.push.showText = body.pushShowText;
       return json(n);
     }
+    if (url === '/api/notifications/push-subscriptions/lookup' && method === 'POST') {
+      const found = this.pushDevices.find((d) => d.endpoint === body.endpoint);
+      return json({ id: found?.id ?? null });
+    }
     if (url === '/api/notifications/push-subscriptions' && method === 'POST') {
       const existing = this.pushDevices.find((d) => d.endpoint === body.endpoint);
       const id = existing?.id ?? `device-${this.pushDevices.length + 1}`;

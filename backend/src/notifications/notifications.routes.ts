@@ -31,16 +31,23 @@ const patchBody = z
   .strict()
   .refine((v) => Object.keys(v).length > 0, 'Nothing to change.');
 
+const pushEndpoint = z
+  .string()
+  .max(2048)
+  .refine(isAllowedPushEndpoint, 'That is not a supported browser push service.');
+
 const subscribeBody = z
   .object({
-    endpoint: z
-      .string()
-      .max(2048)
-      .refine(isAllowedPushEndpoint, 'That is not a supported browser push service.'),
+    endpoint: pushEndpoint,
     keys: z.object({ p256dh: base64urlBytes(65), auth: base64urlBytes(16) }).strict(),
     label: z.string().max(100).optional(),
+    // Background renewal: the browser rotated this endpoint. Only the account that owns the old
+    // endpoint can carry it over, so a renewal can never move a device between accounts.
+    replaces: pushEndpoint.optional(),
   })
   .strict();
+
+const lookupBody = z.object({ endpoint: pushEndpoint }).strict();
 
 /** A label is display text only: control characters are dropped and it is kept short. */
 const cleanLabel = (raw: string | undefined) => {
@@ -112,8 +119,25 @@ export function notificationsRouter(deps: NotificationsDeps & { now: () => Date 
     res.json(await loadSettings(deps, userId));
   });
 
-  // Creating the same endpoint again refreshes its keys (a browser rotates them), so this is also
-  // how a subscription is renewed.
+  // Which of THIS account's devices (if any) is the given browser endpoint. Browser permission says
+  // nothing about the account, so the client asks here instead of re-registering on load.
+  router.post('/push-subscriptions/lookup', async (req, res) => {
+    const { endpoint } = lookupBody.parse(req.body);
+    const [row] = await db
+      .select({ id: pushSubscriptions.id })
+      .from(pushSubscriptions)
+      .where(
+        and(
+          eq(pushSubscriptions.endpoint, endpoint),
+          eq(pushSubscriptions.userId, currentUser(req).id),
+        ),
+      );
+    res.json({ id: row?.id ?? null });
+  });
+
+  // Without `replaces` this is the explicit "turn on for this device" action: the endpoint becomes
+  // this account's (a browser profile belongs to whoever enabled it last). With `replaces` it only
+  // renews a subscription this account already owns.
   router.post('/push-subscriptions', async (req, res) => {
     const userId = currentUser(req).id;
     if (!deps.push.configured) {
@@ -125,6 +149,23 @@ export function notificationsRouter(deps: NotificationsDeps & { now: () => Date 
     }
     const body = subscribeBody.parse(req.body);
     const label = cleanLabel(body.label);
+    if (body.replaces) {
+      const [taken] = await db
+        .select({ id: pushSubscriptions.id })
+        .from(pushSubscriptions)
+        .where(eq(pushSubscriptions.endpoint, body.endpoint));
+      if (taken) throw new AppError('CONFLICT', 409, 'That device is already registered.');
+      const renewed = await db
+        .update(pushSubscriptions)
+        .set({ endpoint: body.endpoint, p256dh: body.keys.p256dh, auth: body.keys.auth })
+        .where(
+          and(eq(pushSubscriptions.endpoint, body.replaces), eq(pushSubscriptions.userId, userId)),
+        )
+        .returning({ id: pushSubscriptions.id });
+      if (!renewed[0]) throw notFound('We could not find that device.');
+      res.status(200).json({ id: renewed[0].id });
+      return;
+    }
     const [row] = await db
       .insert(pushSubscriptions)
       .values({

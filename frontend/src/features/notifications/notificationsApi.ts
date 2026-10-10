@@ -43,3 +43,10 @@ export const registerPushSubscription = (subscription: {
 
 export const removePushSubscription = (id: string) =>
   api<void>(`/notifications/push-subscriptions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+/** Is this browser endpoint one of the signed-in account's devices? Read-only: never registers. */
+export const lookupPushSubscription = (endpoint: string) =>
+  api<{ id: string | null }>('/notifications/push-subscriptions/lookup', {
+    method: 'POST',
+    body: JSON.stringify({ endpoint }),
+  });

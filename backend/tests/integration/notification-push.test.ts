@@ -234,6 +234,95 @@ describe('push subscription lifecycle', () => {
     expect(rows[0]?.userId).toBe(b.user.id);
   });
 
+  describe('account isolation on a shared browser', () => {
+    it('lookup only ever reports the signed-in account’s own device and never changes ownership', async () => {
+      const { app } = setup();
+      const a = await createUserWithSession(db, { email: 'a@example.com' });
+      const b = await createUserWithSession(db, { email: 'b@example.com' });
+      const made = await api(app, a.cookie).post(
+        '/api/notifications/push-subscriptions',
+        subscription(1),
+      );
+      const own = await api(app, a.cookie).post('/api/notifications/push-subscriptions/lookup', {
+        endpoint: endpoint(1),
+      });
+      expect(own.body).toEqual({ id: made.body.id });
+      const other = await api(app, b.cookie).post('/api/notifications/push-subscriptions/lookup', {
+        endpoint: endpoint(1),
+      });
+      expect(other.status).toBe(200);
+      expect(other.body).toEqual({ id: null });
+      expect((await api(app, b.cookie).get('/api/notifications')).body.push.subscriptions).toEqual(
+        [],
+      );
+      const rows = await db.select().from(pushSubscriptions);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.userId).toBe(a.user.id);
+    });
+
+    it('a signed-out caller cannot look an endpoint up', async () => {
+      const { app } = setup();
+      const res = await request(app)
+        .post('/api/notifications/push-subscriptions/lookup')
+        .send({ endpoint: endpoint(1) });
+      expect(res.status).toBe(401);
+    });
+
+    it('a background renewal only carries over a device the account already owns', async () => {
+      const { app } = setup();
+      const a = await createUserWithSession(db, { email: 'a@example.com' });
+      const b = await createUserWithSession(db, { email: 'b@example.com' });
+      await api(app, a.cookie).post('/api/notifications/push-subscriptions', subscription(1));
+
+      // B (same browser) cannot take A's device by sending a "renewal".
+      const stolen = await api(app, b.cookie).post(
+        '/api/notifications/push-subscriptions',
+        subscription(2, { replaces: endpoint(1) }),
+      );
+      expect(stolen.status).toBe(404);
+      let rows = await db.select().from(pushSubscriptions);
+      expect(rows.map((r) => [r.endpoint, r.userId])).toEqual([[endpoint(1), a.user.id]]);
+
+      // A's own renewal swaps the endpoint in place: same device row, same owner.
+      const renewed = await api(app, a.cookie).post(
+        '/api/notifications/push-subscriptions',
+        subscription(3, { replaces: endpoint(1) }),
+      );
+      expect(renewed.status).toBe(200);
+      rows = await db.select().from(pushSubscriptions);
+      expect(rows.map((r) => [r.endpoint, r.userId])).toEqual([[endpoint(3), a.user.id]]);
+    });
+
+    it('turning off for one account leaves the other account’s settings alone', async () => {
+      const { app } = setup();
+      const a = await createUserWithSession(db, { email: 'a@example.com' });
+      const b = await createUserWithSession(db, { email: 'b@example.com' });
+      await api(app, a.cookie).post('/api/notifications/push-subscriptions', subscription(1));
+      await api(app, b.cookie).post('/api/notifications/push-subscriptions', subscription(2));
+      await api(app, a.cookie).patch('/api/notifications', {
+        emailEnabled: false,
+        pushShowText: true,
+      });
+      const aSettings = (await api(app, a.cookie).get('/api/notifications')).body;
+      const bSettings = (await api(app, b.cookie).get('/api/notifications')).body;
+      expect(aSettings.email.enabled).toBe(false);
+      expect(aSettings.push.showText).toBe(true);
+      expect(bSettings.email.enabled).toBe(true);
+      expect(bSettings.push.showText).toBe(false);
+      const aDevice = aSettings.push.subscriptions[0].id;
+      const cross = await api(app, b.cookie).del(
+        `/api/notifications/push-subscriptions/${aDevice}`,
+      );
+      expect(cross.status).toBe(404);
+      await api(app, b.cookie).del(
+        `/api/notifications/push-subscriptions/${bSettings.push.subscriptions[0].id}`,
+      );
+      expect(
+        (await api(app, a.cookie).get('/api/notifications')).body.push.subscriptions,
+      ).toHaveLength(1);
+    });
+  });
+
   it('rejects malformed, unsupported and server-side-request-forgery endpoints', async () => {
     const { app } = setup();
     const { cookie } = await createUserWithSession(db);

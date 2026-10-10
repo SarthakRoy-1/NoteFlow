@@ -65,6 +65,14 @@ function stubPush({
   return { state, pushManager, requestPermission };
 }
 
+/** This account already enabled push on the device whose endpoint the stubbed browser reports. */
+function ownDevice(api: FakeApi) {
+  api.pushDevices.push({ id: 'device-1', endpoint: ENDPOINT, label: 'Chrome on Windows' });
+  api.notifications.push.subscriptions = [
+    { id: 'device-1', label: 'Chrome on Windows', createdAt: '2026-10-08T10:00:00.000Z' },
+  ];
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   // jsdom has no service worker support; remove what a test installed.
@@ -130,16 +138,84 @@ describe('notification settings', () => {
     expect(api.calls('POST', '/api/notifications/push-subscriptions')).toHaveLength(0);
   });
 
-  it('recognises an existing subscription and renews it with the server', async () => {
+  it("shows this account's own device as on, without re-registering it", async () => {
+    const api = new FakeApi();
+    ownDevice(api);
+    stubPush({ permission: 'granted', subscribed: true });
+    renderSettings();
+    expect(await screen.findByText(/notifications are on for this device/i)).toBeInTheDocument();
+    expect(api.calls('POST', '/api/notifications/push-subscriptions')).toHaveLength(0);
+  });
+
+  it('does not treat granted permission and a browser subscription as this account being on', async () => {
+    // Another account subscribed this browser; this account has no device.
+    const api = new FakeApi();
+    const push = stubPush({ permission: 'granted', subscribed: true });
+    renderSettings();
+    const button = await screen.findByRole('button', {
+      name: /enable notifications on this device/i,
+    });
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(screen.queryByText(/notifications are on for this device/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('checkbox', { name: /send push notifications/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/devices? (is|are) subscribed/i)).not.toBeInTheDocument();
+    // Opening Settings changed nothing: no register call, no prompt, no unsubscribe.
+    expect(api.calls('POST', '/api/notifications/push-subscriptions')).toHaveLength(0);
+    expect(push.requestPermission).not.toHaveBeenCalled();
+    expect(push.state.sub?.unsubscribe).not.toHaveBeenCalled();
+    expect(api.pushDevices).toHaveLength(0);
+  });
+
+  it('takes the device over only when the user clicks enable', async () => {
     const api = new FakeApi();
     stubPush({ permission: 'granted', subscribed: true });
     renderSettings();
+    await userEvent.click(
+      await screen.findByRole('button', { name: /enable notifications on this device/i }),
+    );
     expect(await screen.findByText(/notifications are on for this device/i)).toBeInTheDocument();
     expect(api.calls('POST', '/api/notifications/push-subscriptions')).toHaveLength(1);
   });
 
+  it('never shows settings cached for a different account', async () => {
+    const api = new FakeApi();
+    stubPush({ permission: 'granted', subscribed: true });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // What a previous account on this page would have left behind.
+    client.setQueryData(['notifications', 'someone-else'], {
+      ...api.notifications,
+      push: {
+        ...api.notifications.push,
+        subscriptions: [{ id: 'x', label: 'Their laptop', createdAt: '2026-10-08T10:00:00.000Z' }],
+      },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/settings']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(
+      await screen.findByRole('button', { name: /enable notifications on this device/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/their laptop/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps email choices independent of the push state', async () => {
+    const api = new FakeApi();
+    api.notifications.email.enabled = false;
+    stubPush({ permission: 'granted', subscribed: true });
+    renderSettings();
+    const email = await screen.findByRole('checkbox', { name: /email me when a reminder is due/i });
+    expect(email).not.toBeChecked();
+  });
+
   it('turns notifications off for this device: server and browser both forget it', async () => {
     const api = new FakeApi();
+    ownDevice(api);
     const push = stubPush({ permission: 'granted', subscribed: true });
     renderSettings();
     await screen.findByText(/notifications are on for this device/i);
@@ -157,6 +233,7 @@ describe('notification settings', () => {
 
   it('saves the email, pause and show-text choices', async () => {
     const api = new FakeApi();
+    ownDevice(api);
     stubPush({ permission: 'granted', subscribed: true });
     renderSettings();
     await screen.findByText(/notifications are on for this device/i);

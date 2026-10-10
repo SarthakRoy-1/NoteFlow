@@ -1,5 +1,12 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { AskIcon, Mark, NotesIcon, RemindersIcon, TodosIcon } from '../components/icons';
+import {
+  AskIcon,
+  Mark,
+  NotesIcon,
+  RemindersIcon,
+  SettingsIcon,
+  TodosIcon,
+} from '../components/icons';
 import { useLogout, useMe } from '../features/auth/useAuth';
 import { DueAlerts, useDueCount } from '../features/reminders/DueAlerts';
 
@@ -46,9 +53,14 @@ export function AppShell() {
           </NavLink>
         </nav>
         <div className="shell-user">
-          <NavLink to="/settings" className="shell-account" title={user?.email}>
-            {user?.name}
-          </NavLink>
+          <div className="shell-account-row">
+            <NavLink to="/settings" className="shell-account" title={user?.email}>
+              {user?.name}
+            </NavLink>
+            <NavLink to="/settings" className="shell-gear" aria-label="Settings" title="Settings">
+              <SettingsIcon />
+            </NavLink>
+          </div>
           <button
             type="button"
             className="link-button"

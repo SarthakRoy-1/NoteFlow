@@ -67,7 +67,14 @@ self.addEventListener('pushsubscriptionchange', (event) => {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, label: 'Browser' }),
+        // `replaces` makes this a renewal only: the server refuses it unless the signed-in
+        // account owns the old endpoint, so a background event never moves a device.
+        body: JSON.stringify({
+          endpoint: json.endpoint,
+          keys: json.keys,
+          label: 'Browser',
+          replaces: event.oldSubscription.endpoint,
+        }),
       });
     })().catch(() => {}),
   );

@@ -433,6 +433,37 @@ select {
   border-top: 1px solid var(--rule);
 }
 
+.shell-account-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.shell-gear {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+.shell-gear:hover,
+.shell-gear[aria-current='page'] {
+  color: var(--pen);
+}
+
+.shell-gear:focus-visible,
+.shell-account:focus-visible {
+  outline: 2px solid var(--pen);
+  outline-offset: 2px;
+}
+
 .shell-account {
   max-width: 100%;
   overflow: hidden;
