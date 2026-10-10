@@ -269,11 +269,11 @@ AI-created records remain user-editable and user-deletable.
 
 Only implement after P0 and P1 are stable.
 
-- Unclear reminder state such as `needs a time`.
-- Recurring reminders.
-- Notify another user.
-- Smarter Ask AI relevance ranking.
-- Docker setup.
+- Unclear reminder state such as `needs a time`. (implemented)
+- Recurring reminders. (implemented: daily, weekday and chosen-weekday schedules)
+- Notify another user. (implemented: explicit share by verified account email, in-app only)
+- Smarter Ask AI relevance ranking. (implemented: PostgreSQL full-text ranking)
+- Docker setup. (implemented: `docker compose up --build`)
 
 Bonus features must never destabilize core functionality.
 

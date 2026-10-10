@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ApiError } from '../../lib/api';
 import { useMe } from '../auth/useAuth';
+import { SharedWithYou } from '../shares/SharedWithYou';
 import { ReminderItem, isReminderDue } from './ReminderItem';
 import type { Reminder } from './remindersApi';
 import { useReminders } from './useReminders';
@@ -92,6 +93,7 @@ export function RemindersPage() {
       <div className="pane-header">
         <h1>Reminders</h1>
       </div>
+      <SharedWithYou timezone={timezone} />
       {body}
     </section>
   );

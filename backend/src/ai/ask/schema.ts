@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { noNul } from '../../lib/text.js';
 
 export const ANSWER_MAX = 4000;
 
@@ -10,7 +11,8 @@ export const ANSWER_MAX = 4000;
  * (for example invented note ids) is dropped by parsing and never read.
  */
 export const rawAnswerSchema = z.object({
-  answer: z.string().trim().min(1).max(ANSWER_MAX),
+  // A NUL cannot be stored in PostgreSQL text: treat it as unusable model output, not a 500.
+  answer: z.string().trim().min(1).max(ANSWER_MAX).refine(noNul),
   /** false when the supplied notes do not contain what is needed to answer. */
   answerable: z.boolean(),
   /** Positions (1-based) of the supplied notes the answer relies on. */

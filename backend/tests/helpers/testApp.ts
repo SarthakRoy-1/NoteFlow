@@ -180,6 +180,7 @@ export function buildApp(
     ai?: AIProvider;
     now?: () => Date;
     aiCallsPerMinute?: number;
+    writesPerMinute?: number;
     authLimiters?: PasswordAuthLimiters;
     email?: EmailSender;
   } = {},
@@ -191,6 +192,8 @@ export function buildApp(
     ai: extra.ai ?? new FakeAI(),
     now: extra.now ?? (() => FIXED_NOW),
     aiCallsPerMinute: extra.aiCallsPerMinute,
+    // Effectively unlimited unless a test is about the limit itself.
+    writesPerMinute: extra.writesPerMinute ?? 1_000_000,
     authLimiters: extra.authLimiters ?? generousAuthLimiters(),
     email: extra.email ?? new FakeEmail(),
   });

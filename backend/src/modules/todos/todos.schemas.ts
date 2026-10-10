@@ -6,6 +6,7 @@ import {
   type ResolvedDue,
 } from '../../lib/dueInput.js';
 import { notFound } from '../../lib/errors.js';
+import { NO_NUL_MESSAGE, noNul } from '../../lib/text.js';
 
 export const TODO_TITLE_MAX = 200;
 const NOT_FOUND_MESSAGE = 'We could not find that todo.';
@@ -14,7 +15,8 @@ const title = z
   .string({ invalid_type_error: 'Todo text must be text.' })
   .trim()
   .min(1, 'Todo text cannot be empty.')
-  .max(TODO_TITLE_MAX, `Todo text must be at most ${TODO_TITLE_MAX} characters.`);
+  .max(TODO_TITLE_MAX, `Todo text must be at most ${TODO_TITLE_MAX} characters.`)
+  .refine(noNul, NO_NUL_MESSAGE);
 
 // strict(): only these fields can be edited. user_id, source_note_id, ai_fingerprint, timestamps
 // and any other column are rejected, never ignored.

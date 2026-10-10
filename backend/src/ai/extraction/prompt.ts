@@ -29,7 +29,15 @@ FIELDS
   - due_expression: the exact words from the note that express the date/time (e.g. "next Friday at 3 PM").
   - Vague parts of the day ("morning", "evening", "tonight", "sometime", "later", "soon", "end of day") are NOT clock times: use "date" if a day is given, otherwise "none". NEVER make up an hour.
   - Resolve every date using the "Reference calendar" in the user message, which already accounts for the user's timezone. Use its lookup for weekdays ("Friday", "next Friday"), "today", "tomorrow". Do not use any other calendar or timezone.
-  - Phrases without a concrete day (e.g. "next week", "next month", "someday") have no resolvable date: use "none".`;
+  - Phrases without a concrete day (e.g. "next week", "next month", "someday") have no resolvable date: use "none".
+
+REPEATING REMINDERS
+- Something that repeats ("every Monday", "every weekday at 9am", "daily", "each Friday") is ONE reminder with a recurrence, never a todo and never several items.
+- recurrence_kind: "none" (does not repeat; use this unless the note clearly says it repeats, and always for todos), "daily" (every day), "weekdays" (Monday to Friday) or "weekly" (named days of the week).
+- recurrence_weekdays: only for "weekly": the ISO weekday numbers, Monday = 1 ... Sunday = 7 (e.g. "every Monday and Thursday" -> [1, 4]). Use [] for every other kind.
+- recurrence_expression: the exact words from the note that state the repetition (e.g. "every Monday"), or null when recurrence_kind is "none".
+- For a repeating reminder, due_kind describes the time of day only: "datetime" with the next occurrence when a clock time is stated ("every Monday at 9am"), otherwise "none". Never invent a time.
+- Anything that repeats less often than weekly (every other week, monthly, yearly) or more often than daily (hourly) is NOT supported: use recurrence_kind "none".`;
 
 export interface UserPromptInput {
   title: string;

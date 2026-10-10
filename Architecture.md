@@ -217,12 +217,27 @@ Retrieved note content is untrusted data and must not override the system's inst
 - source_note_id
 - content
 - person
-- due_at
+- due_at (for a repeating reminder: always its NEXT occurrence)
+- recurrence_days (ISO weekdays 1-7, NULL = one-off) and recurrence_time ("HH:mm" wall clock in the owner's timezone, NULL = start of day)
 - status/alert metadata
 - created_by_ai
-- AI extraction metadata
+- AI extraction metadata (ai_fingerprint, ai_text = the model's original wording, user_modified)
 - created_at
 - updated_at
+
+## ReminderShare
+
+A reminder explicitly shared by its owner with one other user (`reminder_shares`):
+
+- id
+- reminder_id and owner_id (a composite foreign key to `reminders(id, user_id)`: the sharer must own it)
+- recipient_id (a real user resolved server-side from a verified account email; never a display name)
+- created_at
+- acknowledged_at (the recipient's own acknowledgement; independent of the owner's)
+
+Unique per (reminder, recipient); a user cannot share with themselves; deleting the reminder or either
+account deletes the share. The recipient reads it only through `GET /api/shared-reminders`, which returns
+the reminder's text, time and repeat rule and the sender's name, never the source note.
 
 ## AskHistory
 

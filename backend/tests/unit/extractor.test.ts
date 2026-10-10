@@ -208,7 +208,16 @@ describe('grounding and business rules', () => {
     );
     const [i] = await run(ai, { content: 'buy milk' });
     expect(Object.keys(i ?? {}).sort()).toEqual(
-      ['dueAt', 'dueHasTime', 'evidence', 'kind', 'person', 'text'].sort(),
+      [
+        'dueAt',
+        'dueHasTime',
+        'evidence',
+        'kind',
+        'person',
+        'recurrenceDays',
+        'recurrenceTime',
+        'text',
+      ].sort(),
     );
   });
 });

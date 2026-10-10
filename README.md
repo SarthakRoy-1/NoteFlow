@@ -154,7 +154,11 @@ JSON matching a strict schema; the backend then checks that every item is quoted
 resolves dates in the **user's timezone**, and only then writes todos/reminders for that user and
 note. If the AI is unavailable, slow, rate-limited or returns garbage, the note is still saved and
 shows a clear message with a **Retry analysis** button. Re-saving an unchanged note never calls the
-AI or creates duplicates. Tests never call Gemini; they use a scripted fake provider. To check the real API by hand run
+AI or creates duplicates. Re-analysis is also safe when the model **rewords** an action: a
+reworded copy of something you edited, completed or deleted is recognised (by its words, strictly:
+a different task is never folded in) and is not added again. Something that repeats ("every Monday
+at 9am", "every weekday") becomes one repeating reminder; unsupported repetitions (every other
+week, monthly, hourly) stay one-off rather than being guessed. Tests never call Gemini; they use a scripted fake provider. To check the real API by hand run
 `npm run ai:smoke -w backend` (2 requests; add `-- --all` for 5). The Gemini free tier allows only
 20 requests per day per model, so use it sparingly.
 
@@ -166,6 +170,20 @@ clock; the browser re-checks every 30 seconds, when the tab regains focus, and a
 the next reminder is due. The alert stays until you press **Got it**, so a reload or a second tab
 shows the same alerts. A reminder with no time never alerts. A date-only reminder ("tomorrow")
 alerts from the start of that day in your timezone; no clock time is invented for it.
+
+**Repeating reminders.** A reminder can repeat on chosen weekdays (every day, weekdays, or any set such as
+Monday and Thursday) at its due time, kept on the wall clock of your timezone across daylight-saving
+changes. `dueAt` is always its next occurrence. **Got it** on a due occurrence moves it to the next
+one strictly after now (missed occurrences are not queued); a double click or second tab cannot skip
+one. Choose the days in **Edit -> Repeat**, or let the AI set them from the note.
+
+**Notifying another user.** On a reminder press **Share** and enter the email of that person's NoteFlow
+(Google) account. The server resolves the email to a real, verified account (a name is never enough);
+an unknown email is rejected. The recipient sees the reminder's text, time and repeat rule under
+**Shared with you** and in their alert banner when it is due, and acknowledges it themselves. They
+never see the source note, and cannot read, edit or delete your reminder. Editing the reminder updates
+what they see; deleting it, or **Stop sharing**, removes it from their list. A reminder can be shared
+with at most 10 people, and share attempts are limited to 10 a minute.
 
 ## Ask AI
 
@@ -204,13 +222,21 @@ read-only and private to you; a deleted source note keeps its saved title and is
 | GET    | `/api/reminders`               | yes  | your reminders: pending first, soonest due first, undated last; each has its `sourceNote` |
 | GET    | `/api/reminders/due`           | yes  | reminders whose time has arrived (pending, `dueAt <= now`) plus `nextDueAt`; drives the in-app alert banner |
 | GET    | `/api/reminders/:id`           | yes  | one reminder                                       |
-| PATCH  | `/api/reminders/:id`           | yes  | `{ text?, person?, due?, acknowledged? }`; `due` is `{ date, time? }` in your timezone or `null`; other fields are rejected |
+| PATCH  | `/api/reminders/:id`           | yes  | `{ text?, person?, due?, recurrence?, acknowledged? }`; `due` is `{ date, time? }` in your timezone or `null`; `recurrence` is `{ days: [1..7] }` (1 = Monday) or `null`; acknowledging a due repeating reminder moves it to its next occurrence; other fields are rejected |
 | DELETE | `/api/reminders/:id`           | yes  | delete a reminder (an AI-created one will not come back on re-analysis) |
+| GET    | `/api/reminders/:id/shares`    | yes  | who your reminder is shared with (owner only; anyone else gets 404) |
+| POST   | `/api/reminders/:id/shares`    | yes  | `{ email }` (only field accepted): share with that NoteFlow account; 404 `RECIPIENT_NOT_FOUND`, 422 `CANNOT_SHARE_WITH_SELF` / `SHARE_LIMIT` |
+| DELETE | `/api/reminders/:id/shares/:shareId` | yes | stop sharing with one person                  |
+| GET    | `/api/shared-reminders`        | yes  | reminders shared with you (text, time, repeat rule, sender name) plus `nextDueAt` |
+| PATCH  | `/api/shared-reminders/:id`    | yes  | `{ acknowledged: true }`                           |
+| DELETE | `/api/shared-reminders/:id`    | yes  | remove it from your own list (the owner's reminder is untouched) |
 | POST   | `/api/ask`                     | yes  | `{ question }` (1-500 chars; other fields rejected) -> `201 { ask: { id, question, answer, status, createdAt, sources: [{ noteId, title }] } }`; `status` is `answered` or `no_info` |
 | GET    | `/api/ask/history`             | yes  | your last 50 questions, newest first, each with its sources |
 | GET    | `/api/ask/history/:id`         | yes  | one of your entries (anyone else's, or a malformed id, is 404) |
 
 Errors always use `{ "error": { "code", "message" } }`. Every other `/api` route requires a session.
+All `/api` responses carry `Cache-Control: no-store`. Each user is limited to 120 state-changing
+requests a minute (429 `RATE_LIMITED`), in addition to the AI and sharing limits.
 
 ## Layout
 
@@ -223,8 +249,9 @@ docs/       Contracts and review checklist
 ## Deployment (Vercel frontend + Render API + Render PostgreSQL)
 
 Configuration lives in `render.yaml` (API and database) and `vercel.json` (static frontend plus an `/api` rewrite).
-This has been verified locally (production build, `NODE_ENV=production` start, migrations, health check, Secure
-cookie, origin check) but not yet on the hosted services.
+Deployed at https://noteflow-olive.vercel.app (API on Render, reached through the Vercel rewrite). The
+static app is served with a Content-Security-Policy, `X-Frame-Options: DENY`, `nosniff`, a strict referrer
+policy and a restrictive Permissions-Policy (`vercel.json`; the same headers are set by `nginx.conf` in Docker).
 
 1. **Render:** create a Blueprint from this repository. It creates one PostgreSQL database and one API instance
    (`npm ci --include=dev && npm run build -w backend`; start `node backend/dist/db/migrate.js && node backend/dist/server.js`;
@@ -232,8 +259,8 @@ cookie, origin check) but not yet on the hosted services.
    connection string (no extra SSL setup), `AI_PROVIDER=groq`. Enter these in the dashboard (names only):
    `APP_BASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GROQ_API_KEY`
    (optional `GROQ_MODEL`). Leave `ENABLE_PASSWORD_AUTH` unset.
-2. **Vercel:** import the repository with the repository root as the project root. Replace
-   `REPLACE-WITH-RENDER-HOST.onrender.com` in `vercel.json` with the real Render host and redeploy. The rewrite
+2. **Vercel:** import the repository with the repository root as the project root (preset "Other"). Set the Render
+   host in the `/api` rewrite of `vercel.json` and redeploy. The rewrite
    keeps the browser on one origin, which is required: the session cookie is `SameSite=Lax`, `HttpOnly`, `Secure` in
    production, and there is no CORS layer.
 3. **Google Cloud:** set `APP_BASE_URL` to the Vercel https origin and `GOOGLE_REDIRECT_URI` to
@@ -250,6 +277,14 @@ cookie, origin check) but not yet on the hosted services.
 - Real-device mobile browsers, a deployed host, and Google account linking from Settings have not been tested.
 - AI calls are made while the request waits (note save and Ask AI), with a limit per attempt (12 s Gemini, 20 s Groq) and at most one retry, only on a server or network error.
 - Ask AI retrieval is keyword based (PostgreSQL full text), not semantic.
-- Not built (bonus items): recurring reminders, notifying another user.
+- Repeating reminders support daily, weekday and chosen-weekday schedules only (no "every other week", monthly or
+  yearly). Re-analysis recognises a reworded action only when its words are very close; a rewording that adds a
+  detail is treated as a new task (a deletable extra item is preferred to a hidden real task).
+- Sharing notifies inside NoteFlow only (no email or push). The recipient must already have signed in once. A shared
+  repeating reminder alerts the recipient every occurrence in the owner's timezone, independent of the owner's own
+  acknowledgements.
+- Signing in with Google inside the Docker stack needs an OAuth client that lists
+  `http://localhost:8080/api/auth/google/callback`; the stack itself (build, migrations, health, headers, OAuth
+  start) is verified without it.
 - A reminder with no time is shown as "No time set" and never alerts.
 - Live AI checks so far: one extraction and one Ask AI request against Groq on an isolated test database.

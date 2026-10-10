@@ -4,6 +4,8 @@ import {
   deleteReminder,
   fetchDueReminders,
   listReminders,
+  revokeShare,
+  shareReminder,
   updateReminder,
   type ReminderChanges,
 } from './remindersApi';
@@ -51,6 +53,22 @@ export function useUpdateReminder(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (changes: ReminderChanges) => updateReminder(id, changes),
+    onSuccess: () => qc.invalidateQueries({ queryKey: REMINDERS_KEY }),
+  });
+}
+
+export function useShareReminder(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (email: string) => shareReminder(id, email),
+    onSuccess: () => qc.invalidateQueries({ queryKey: REMINDERS_KEY }),
+  });
+}
+
+export function useRevokeShare(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (shareId: string) => revokeShare(id, shareId),
     onSuccess: () => qc.invalidateQueries({ queryKey: REMINDERS_KEY }),
   });
 }

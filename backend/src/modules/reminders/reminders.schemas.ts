@@ -6,6 +6,8 @@ import {
   type ResolvedDue,
 } from '../../lib/dueInput.js';
 import { notFound } from '../../lib/errors.js';
+import { recurrenceInputSchema } from '../../lib/recurrence.js';
+import { NO_NUL_MESSAGE, noNul } from '../../lib/text.js';
 
 export const REMINDER_TEXT_MAX = 200;
 export const REMINDER_PERSON_MAX = 80;
@@ -15,13 +17,15 @@ const text = z
   .string({ invalid_type_error: 'Reminder text must be text.' })
   .trim()
   .min(1, 'Reminder text cannot be empty.')
-  .max(REMINDER_TEXT_MAX, `Reminder text must be at most ${REMINDER_TEXT_MAX} characters.`);
+  .max(REMINDER_TEXT_MAX, `Reminder text must be at most ${REMINDER_TEXT_MAX} characters.`)
+  .refine(noNul, NO_NUL_MESSAGE);
 
 // A blank person clears it (null). The person is informational only: nobody is notified.
 const person = z
   .string({ invalid_type_error: 'Person must be text.' })
   .trim()
   .max(REMINDER_PERSON_MAX, `Person must be at most ${REMINDER_PERSON_MAX} characters.`)
+  .refine(noNul, NO_NUL_MESSAGE)
   .transform((v) => (v === '' ? null : v))
   .nullable();
 
@@ -32,7 +36,9 @@ export const updateReminderBody = z
     text: text.optional(),
     person: person.optional(),
     due: dueInputSchema.optional(),
-    /** true = "got it" (stops alerting); false = re-open. */
+    /** { days: [1..7] } repeats on those weekdays (at the due time); null stops repeating. */
+    recurrence: recurrenceInputSchema.optional(),
+    /** true = "got it" (stops alerting, or moves a repeating reminder on); false = re-open. */
     acknowledged: z.boolean().optional(),
   })
   .strict()
@@ -41,6 +47,7 @@ export const updateReminderBody = z
       b.text !== undefined ||
       b.person !== undefined ||
       b.due !== undefined ||
+      b.recurrence !== undefined ||
       b.acknowledged !== undefined,
     { message: 'Provide something to update.' },
   );

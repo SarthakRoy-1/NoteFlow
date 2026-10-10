@@ -8,6 +8,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   unique,
@@ -177,6 +178,8 @@ export const todos = pgTable(
     completedAt: timestamptz('completed_at'),
     createdByAi: boolean('created_by_ai').notNull().default(false),
     aiFingerprint: text('ai_fingerprint'),
+    /** The AI's own wording, kept when the user edits `title`, so a reworded copy can be recognised. */
+    aiText: text('ai_text'),
     userModified: boolean('user_modified').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -211,8 +214,17 @@ export const reminders = pgTable(
     dueHasTime: boolean('due_has_time').notNull().default(true),
     status: reminderStatus('status').notNull().default('pending'),
     alertedAt: timestamptz('alerted_at'),
+    /**
+     * Recurring reminders: the ISO weekdays (1 = Monday ... 7 = Sunday) it repeats on. NULL = a
+     * one-off reminder. `dueAt` is always the NEXT occurrence; acknowledging one advances it.
+     */
+    recurrenceDays: smallint('recurrence_days').array(),
+    /** Wall-clock "HH:mm" in the owner's timezone. NULL (with days set) = alert at the start of the day. */
+    recurrenceTime: text('recurrence_time'),
     createdByAi: boolean('created_by_ai').notNull().default(false),
     aiFingerprint: text('ai_fingerprint'),
+    /** The AI's own wording, kept when the user edits `content`, so a reworded copy can be recognised. */
+    aiText: text('ai_text'),
     userModified: boolean('user_modified').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -223,6 +235,16 @@ export const reminders = pgTable(
       foreignColumns: [notes.id, notes.userId],
       name: 'reminders_source_note_owner_fk',
     }).onDelete('cascade'),
+    // Lets reminder_shares reference (reminder, owner) together, like notes_id_user_id_key above.
+    unique('reminders_id_user_id_key').on(t.id, t.userId),
+    check(
+      'reminders_recurrence_days_check',
+      sql`${t.recurrenceDays} is null or (cardinality(${t.recurrenceDays}) between 1 and 7 and ${t.recurrenceDays} <@ array[1,2,3,4,5,6,7]::smallint[])`,
+    ),
+    check(
+      'reminders_recurrence_time_check',
+      sql`${t.recurrenceTime} is null or (${t.recurrenceDays} is not null and ${t.recurrenceTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$')`,
+    ),
     index('reminders_user_due_idx').on(t.userId, t.status, t.dueAt),
     index('reminders_source_note_idx').on(t.sourceNoteId),
     uniqueIndex('reminders_note_fingerprint_key')
@@ -241,6 +263,9 @@ export const aiDismissed = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     kind: itemKind('kind').notNull(),
     aiFingerprint: text('ai_fingerprint').notNull(),
+    /** The dismissed item's text and person, so a reworded copy of it is not brought back (nullable: older rows). */
+    itemText: text('item_text'),
+    person: text('person'),
   },
   (t) => [
     primaryKey({ columns: [t.sourceNoteId, t.kind, t.aiFingerprint] }),
@@ -249,6 +274,39 @@ export const aiDismissed = pgTable(
       foreignColumns: [notes.id, notes.userId],
       name: 'ai_dismissed_source_note_owner_fk',
     }).onDelete('cascade'),
+  ],
+);
+
+/**
+ * A reminder its owner explicitly shared with one other NoteFlow user. The recipient is a real user
+ * (resolved server-side from a verified account email), never a display name. The recipient sees
+ * only the reminder's text, time and recurrence, never its source note. Deleting the reminder (or
+ * either account) deletes the share.
+ */
+export const reminderShares = pgTable(
+  'reminder_shares',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reminderId: uuid('reminder_id').notNull(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+    /** The last time the recipient acknowledged it. NULL = never (a new, unread share). */
+    acknowledgedAt: timestamptz('acknowledged_at'),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.reminderId, t.ownerId],
+      foreignColumns: [reminders.id, reminders.userId],
+      name: 'reminder_shares_reminder_owner_fk',
+    }).onDelete('cascade'),
+    unique('reminder_shares_reminder_recipient_key').on(t.reminderId, t.recipientId),
+    check('reminder_shares_not_self', sql`${t.ownerId} <> ${t.recipientId}`),
+    index('reminder_shares_recipient_idx').on(t.recipientId, t.createdAt.desc()),
   ],
 );
 

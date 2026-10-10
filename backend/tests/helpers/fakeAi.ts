@@ -31,6 +31,9 @@ export interface FakeItem {
   due_expression: string | null;
   due_local: string | null;
   due_relative_minutes: number | null;
+  recurrence_kind?: 'none' | 'daily' | 'weekdays' | 'weekly' | null;
+  recurrence_weekdays?: number[] | null;
+  recurrence_expression?: string | null;
   [extra: string]: unknown;
 }
 
@@ -43,6 +46,9 @@ export const item = (partial: Partial<FakeItem> = {}): FakeItem => ({
   due_expression: null,
   due_local: null,
   due_relative_minutes: 0,
+  recurrence_kind: 'none',
+  recurrence_weekdays: [],
+  recurrence_expression: null,
   ...partial,
 });
 

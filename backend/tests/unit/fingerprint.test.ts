@@ -9,6 +9,8 @@ const make = (partial: Partial<ExtractedItem> = {}): ExtractedItem => ({
   evidence: 'buy milk',
   dueAt: null,
   dueHasTime: false,
+  recurrenceDays: null,
+  recurrenceTime: null,
   ...partial,
 });
 

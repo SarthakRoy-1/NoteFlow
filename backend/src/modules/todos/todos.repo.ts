@@ -147,6 +147,8 @@ export async function deleteTodo(db: Db, userId: string, id: string): Promise<bo
         sourceNoteId: todos.sourceNoteId,
         createdByAi: todos.createdByAi,
         aiFingerprint: todos.aiFingerprint,
+        title: todos.title,
+        aiText: todos.aiText,
       })
       .from(todos)
       .where(and(eq(todos.id, id), eq(todos.userId, userId)))
@@ -160,6 +162,8 @@ export async function deleteTodo(db: Db, userId: string, id: string): Promise<bo
           sourceNoteId: row.sourceNoteId,
           kind: 'todo',
           aiFingerprint: row.aiFingerprint,
+          // The model's own wording when known: that is what a later reworded copy resembles.
+          itemText: row.aiText ?? row.title,
         })
         .onConflictDoNothing();
     }

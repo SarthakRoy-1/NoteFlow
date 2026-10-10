@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { notFound } from '../../lib/errors.js';
+import { NO_NUL_MESSAGE, noNul } from '../../lib/text.js';
 
 export const TITLE_MAX = 200;
 export const CONTENT_MAX = 20_000;
@@ -8,13 +9,15 @@ const title = z
   .string({ required_error: 'Title is required.' })
   .trim()
   .min(1, 'Title cannot be empty.')
-  .max(TITLE_MAX, `Title must be at most ${TITLE_MAX} characters.`);
+  .max(TITLE_MAX, `Title must be at most ${TITLE_MAX} characters.`)
+  .refine(noNul, NO_NUL_MESSAGE);
 
 const content = z
   .string({ required_error: 'Note text is required.' })
   .trim()
   .min(1, 'Note text cannot be empty.')
-  .max(CONTENT_MAX, `Note text must be at most ${CONTENT_MAX} characters.`);
+  .max(CONTENT_MAX, `Note text must be at most ${CONTENT_MAX} characters.`)
+  .refine(noNul, NO_NUL_MESSAGE);
 
 // strict(): any unknown key, notably a client-supplied user_id, is rejected rather than ignored.
 export const createNoteBody = z.object({ title, content }).strict();

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { describeRecurrence } from '../../lib/recurrence';
 import { formatDue, isPast } from '../../lib/time';
 import { errorMessage } from '../notes/useNotes';
 import { ReminderEditForm } from './ReminderEditForm';
 import type { Reminder } from './remindersApi';
+import { ShareReminder } from './ShareReminder';
 import { useDeleteReminder, useUpdateReminder } from './useReminders';
 
 /** A pending reminder whose time has arrived. Mirrors the server rule that drives alerts. */
@@ -13,6 +15,7 @@ export const isReminderDue = (r: Reminder, now: Date = new Date()) =>
 export function ReminderItem({ reminder, timezone }: { reminder: Reminder; timezone: string }) {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const update = useUpdateReminder(reminder.id);
   const remove = useDeleteReminder(reminder.id);
 
@@ -55,7 +58,13 @@ export function ReminderItem({ reminder, timezone }: { reminder: Reminder; timez
           ) : (
             <span className="todo-due">No time set</span>
           )}
+          {reminder.recurrence && (
+            <span className="badge badge-person">{describeRecurrence(reminder.recurrence)}</span>
+          )}
           {reminder.person && <span className="badge badge-person">For {reminder.person}</span>}
+          {reminder.sharedWith.length > 0 && (
+            <span className="badge badge-person">Shared with {reminder.sharedWith.length}</span>
+          )}
           {reminder.createdByAi && <span className="badge">AI-created</span>}
           {handled && <span className="badge badge-done">Acknowledged</span>}
           <Link className="todo-source" to={`/notes/${reminder.sourceNote.id}`}>
@@ -74,6 +83,8 @@ export function ReminderItem({ reminder, timezone }: { reminder: Reminder; timez
           {errorMessage(remove.error)}
         </p>
       )}
+
+      {sharing && <ShareReminder reminder={reminder} onClose={() => setSharing(false)} />}
 
       {confirmingDelete ? (
         <div className="confirm" role="group" aria-label={`Confirm delete: ${reminder.text}`}>
@@ -111,7 +122,7 @@ export function ReminderItem({ reminder, timezone }: { reminder: Reminder; timez
             >
               Re-open
             </button>
-          ) : (
+          ) : reminder.recurrence && !due ? null : (
             <button
               type="button"
               className={due ? 'button button-primary' : 'button'}
@@ -122,6 +133,15 @@ export function ReminderItem({ reminder, timezone }: { reminder: Reminder; timez
               Got it
             </button>
           )}
+          <button
+            type="button"
+            className="button"
+            onClick={() => setSharing((open) => !open)}
+            aria-expanded={sharing}
+            aria-label={`Share: ${reminder.text}`}
+          >
+            Share
+          </button>
           <button
             type="button"
             className="button"

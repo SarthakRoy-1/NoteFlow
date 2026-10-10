@@ -29,6 +29,20 @@
       "when": 1791530749828,
       "tag": "0003_email_verification_linking_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791607613040,
+      "tag": "0004_recurring_and_shared_reminders",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791608387461,
+      "tag": "0005_ai_original_text",
+      "breakpoints": true
     }
   ]
 }

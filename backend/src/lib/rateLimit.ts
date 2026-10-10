@@ -36,3 +36,9 @@ export function createRateLimiter(options: {
  * 5 requests/minute so one failed call's retry still fits; raise it with a paid tier.
  */
 export const AI_CALLS_PER_MINUTE = 4;
+
+/** Per-user ceiling on state-changing requests of every kind (generous for a person, stops a loop). */
+export const API_WRITES_PER_MINUTE = 120;
+
+/** Looking up other accounts by email (sharing a reminder) is a probe too: keep it slow. */
+export const SHARE_ATTEMPTS_PER_MINUTE = 10;

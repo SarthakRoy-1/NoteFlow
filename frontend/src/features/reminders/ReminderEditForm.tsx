@@ -7,6 +7,7 @@ import {
   validateDue,
   type DueState,
 } from '../../components/DueFields';
+import { ALL_DAYS, DAY_LABELS, WEEKDAYS } from '../../lib/recurrence';
 import {
   REMINDER_PERSON_MAX,
   REMINDER_TEXT_MAX,
@@ -29,6 +30,8 @@ export function ReminderEditForm({ reminder, timezone, pending, error, onSave, o
   const [text, setText] = useState(reminder.text);
   const [person, setPerson] = useState(reminder.person ?? '');
   const [due, setDue] = useState<DueState>(initial);
+  const initialDays = reminder.recurrence?.days ?? [];
+  const [days, setDays] = useState<number[]>(initialDays);
   const [problem, setProblem] = useState<string | null>(null);
   const textId = useId();
   const personId = useId();
@@ -52,6 +55,10 @@ export function ReminderEditForm({ reminder, timezone, pending, error, onSave, o
     if (trimmedText !== reminder.text) changes.text = trimmedText;
     if (trimmedPerson !== (reminder.person ?? '')) changes.person = trimmedPerson || null;
     if (dueChanged(due, initial)) changes.due = toDueInput(due);
+    const sorted = [...days].sort((a, b) => a - b);
+    if (sorted.join(',') !== [...initialDays].sort((a, b) => a - b).join(',')) {
+      changes.recurrence = sorted.length > 0 ? { days: sorted } : null;
+    }
     if (Object.keys(changes).length === 0) return onCancel(); // nothing to save
     onSave(changes);
   };
@@ -81,6 +88,41 @@ export function ReminderEditForm({ reminder, timezone, pending, error, onSave, o
         />
       </div>
       <DueFields value={due} onChange={setDue} timezone={timezone} disabled={pending} />
+      <fieldset className="repeat-fields" disabled={pending}>
+        <legend>Repeat</legend>
+        <div className="repeat-days">
+          {DAY_LABELS.map((label, i) => {
+            const day = i + 1;
+            return (
+              <label key={label} className="repeat-day">
+                <input
+                  type="checkbox"
+                  checked={days.includes(day)}
+                  onChange={(e) =>
+                    setDays(e.target.checked ? [...days, day] : days.filter((d) => d !== day))
+                  }
+                />
+                <span>{label}</span>
+              </label>
+            );
+          })}
+        </div>
+        <div className="repeat-presets">
+          <button type="button" className="link-button" onClick={() => setDays([...ALL_DAYS])}>
+            Every day
+          </button>
+          <button type="button" className="link-button" onClick={() => setDays([...WEEKDAYS])}>
+            Weekdays
+          </button>
+          <button type="button" className="link-button" onClick={() => setDays([])}>
+            Does not repeat
+          </button>
+        </div>
+        <p className="muted due-hint">
+          Repeats at the due time above ({timezone}). With no time it repeats at the start of the
+          day.
+        </p>
+      </fieldset>
       {shownError && (
         <p role="alert" className="alert alert-error">
           {shownError}

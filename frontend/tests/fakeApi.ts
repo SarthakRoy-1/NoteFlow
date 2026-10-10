@@ -35,12 +35,29 @@ export interface FakeReminder {
   person: string | null;
   dueAt: string | null;
   dueHasTime: boolean;
+  recurrence: { days: number[]; time: string | null } | null;
   status: 'pending' | 'acknowledged' | 'dismissed';
   acknowledgedAt: string | null;
   createdByAi: boolean;
   createdAt: string;
   updatedAt: string;
   sourceNote: { id: string; title: string };
+  sharedWith: { shareId: string; name: string; email: string }[];
+}
+
+/** A reminder somebody else shared with the signed-in user (what GET /api/shared-reminders returns). */
+export interface FakeShared {
+  id: string;
+  text: string;
+  dueAt: string | null;
+  dueHasTime: boolean;
+  recurrence: { days: number[]; time: string | null } | null;
+  from: { name: string };
+  sharedAt: string;
+  acknowledgedAt: string | null;
+  isNew: boolean;
+  due: boolean;
+  occurrenceAt: string | null;
 }
 
 export interface FakeAsk {
@@ -74,6 +91,8 @@ export class FakeApi {
   notes: FakeNote[] = [];
   todos: FakeTodo[] = [];
   reminders: FakeReminder[] = [];
+  /** Reminders other users shared with the signed-in user. */
+  sharedWithMe: FakeShared[] = [];
   asks: FakeAsk[] = [];
   /** What the next successful POST /api/ask returns (besides id, question and time). */
   askResult: Pick<FakeAsk, 'answer' | 'status' | 'sources'> = {
@@ -131,16 +150,39 @@ export class FakeApi {
       person: null,
       dueAt: null,
       dueHasTime: true,
+      recurrence: null,
       status: 'pending',
       acknowledgedAt: null,
       createdByAi: true,
       createdAt: stamp,
       updatedAt: stamp,
       sourceNote: { id: '00000000-0000-4000-8000-0000000000aa', title: 'Source note' },
+      sharedWith: [],
       ...partial,
     };
     this.reminders.push(reminder);
     return reminder;
+  }
+
+  addShared(partial: Partial<FakeShared> = {}): FakeShared {
+    this.counter += 1;
+    const stamp = new Date((this.clock += 60_000)).toISOString();
+    const shared: FakeShared = {
+      id: `40000000-0000-4000-8000-${String(this.counter).padStart(12, '0')}`,
+      text: `Shared reminder ${this.counter}`,
+      dueAt: null,
+      dueHasTime: true,
+      recurrence: null,
+      from: { name: 'Sam Sender' },
+      sharedAt: stamp,
+      acknowledgedAt: null,
+      isNew: true,
+      due: false,
+      occurrenceAt: null,
+      ...partial,
+    };
+    this.sharedWithMe.push(shared);
+    return shared;
   }
 
   addTodo(partial: Partial<FakeTodo> = {}): FakeTodo {
@@ -363,6 +405,66 @@ export class FakeApi {
       );
       return json({ reminders: sorted });
     }
+    if (url === '/api/shared-reminders' && method === 'GET') {
+      return json({ shared: this.sharedWithMe, nextDueAt: null });
+    }
+    const sharedMatch = /^\/api\/shared-reminders\/([^/]+)$/.exec(url);
+    if (sharedMatch) {
+      const item = this.sharedWithMe.find((s) => s.id === sharedMatch[1]);
+      if (!item) return apiError(404, 'NOT_FOUND', 'We could not find that shared reminder.');
+      if (method === 'PATCH') {
+        item.isNew = false;
+        item.due = false;
+        item.acknowledgedAt = new Date().toISOString();
+        return json({ shared: item });
+      }
+      if (method === 'DELETE') {
+        this.sharedWithMe = this.sharedWithMe.filter((s) => s.id !== item.id);
+        return new Response(null, { status: 204 });
+      }
+    }
+    const shareCreate = /^\/api\/reminders\/([^/]+)\/shares$/.exec(url);
+    if (shareCreate && method === 'POST') {
+      const reminder = this.reminders.find((r) => r.id === shareCreate[1]);
+      if (!reminder) return apiError(404, 'NOT_FOUND', 'We could not find that reminder.');
+      const email = String(body?.email ?? '');
+      if (email === 'unknown@example.com') {
+        return apiError(
+          404,
+          'RECIPIENT_NOT_FOUND',
+          'We could not find a NoteFlow account for that email. They need to sign in to NoteFlow with that Google account first.',
+        );
+      }
+      if (email === this.me.email) {
+        return apiError(
+          422,
+          'CANNOT_SHARE_WITH_SELF',
+          'That is your own account, so this reminder is already yours.',
+        );
+      }
+      this.counter += 1;
+      const name = email.split('@')[0] ?? 'friend';
+      const shareId = `50000000-0000-4000-8000-${String(this.counter).padStart(12, '0')}`;
+      reminder.sharedWith.push({ shareId, name, email });
+      return json(
+        {
+          share: {
+            id: shareId,
+            recipient: { name, email },
+            createdAt: new Date().toISOString(),
+            acknowledgedAt: null,
+          },
+        },
+        201,
+      );
+    }
+    const shareDelete = /^\/api\/reminders\/([^/]+)\/shares\/([^/]+)$/.exec(url);
+    if (shareDelete && method === 'DELETE') {
+      const reminder = this.reminders.find((r) => r.id === shareDelete[1]);
+      if (!reminder) return apiError(404, 'NOT_FOUND', 'We could not find that reminder.');
+      reminder.sharedWith = reminder.sharedWith.filter((s) => s.shareId !== shareDelete[2]);
+      return new Response(null, { status: 204 });
+    }
     const reminderMatch = /^\/api\/reminders\/([^/]+)$/.exec(url);
     if (reminderMatch) {
       const reminder = this.reminders.find((r) => r.id === reminderMatch[1]);
@@ -377,9 +479,28 @@ export class FakeApi {
           reminder.status = 'pending';
           reminder.acknowledgedAt = null;
         }
+        if (body.recurrence !== undefined) {
+          reminder.recurrence = body.recurrence
+            ? {
+                days: [...body.recurrence.days].sort(),
+                time: reminder.dueHasTime && reminder.dueAt ? reminder.dueAt.slice(11, 16) : null,
+              }
+            : null;
+        }
         if (body.acknowledged !== undefined) {
-          reminder.status = body.acknowledged ? 'acknowledged' : 'pending';
-          reminder.acknowledgedAt = body.acknowledged ? new Date().toISOString() : null;
+          if (reminder.recurrence && body.acknowledged) {
+            // A repeating reminder re-arms: it moves to its next occurrence and stays pending.
+            if (reminder.dueAt && new Date(reminder.dueAt).getTime() <= Date.now()) {
+              // The next occurrence strictly after now (missed ones are not queued).
+              let next = new Date(reminder.dueAt).getTime();
+              while (next <= Date.now()) next += 7 * 86_400_000;
+              reminder.dueAt = new Date(next).toISOString();
+              reminder.acknowledgedAt = new Date().toISOString();
+            }
+          } else {
+            reminder.status = body.acknowledged ? 'acknowledged' : 'pending';
+            reminder.acknowledgedAt = body.acknowledged ? new Date().toISOString() : null;
+          }
         }
         return json({ reminder });
       }

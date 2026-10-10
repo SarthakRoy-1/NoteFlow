@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { describeRecurrence } from '../../lib/recurrence';
 import { formatDue } from '../../lib/time';
 import { useMe } from '../auth/useAuth';
 import { useReminders } from '../reminders/useReminders';
@@ -34,6 +35,7 @@ export function DerivedItems({ noteId }: { noteId: string }) {
             <span className="muted">
               {r.dueAt ? `Due ${formatDue(r.dueAt, r.dueHasTime, timezone)}` : 'No time set'}
             </span>
+            {r.recurrence && <span className="muted">{describeRecurrence(r.recurrence)}</span>}
           </li>
         ))}
       </ul>
