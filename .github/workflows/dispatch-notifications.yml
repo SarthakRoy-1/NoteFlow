@@ -5,7 +5,8 @@
 # Needs two repository secrets (Settings -> Secrets and variables -> Actions):
 #   NOTEFLOW_API_URL            e.g. https://noteflow-api-rm7b.onrender.com  (no trailing slash)
 #   NOTIFICATIONS_CRON_SECRET   the same value as the API's NOTIFICATIONS_CRON_SECRET
-# Without them the job exits successfully and does nothing.
+# Without them the job exits successfully and does nothing. The job fails when the endpoint
+# reports permanently failed deliveries, so a green run means nothing was lost on that tick.
 #
 # GitHub runs scheduled workflows on a best-effort basis (often a few minutes late) and pauses them
 # after 60 days without repository activity. For tighter timing use cron-job.org or a Render cron job.
@@ -37,10 +38,21 @@ jobs:
             exit 0
           fi
           # A cold Render instance can take about a minute to answer the first request.
-          status=$(curl --silent --show-error --max-time 120 --retry 2 --retry-delay 5 \
-            --output /dev/null --write-out '%{http_code}' \
-            --request POST \
-            --header "Authorization: Bearer ${CRON_SECRET}" \
-            "${API_URL%/}/api/internal/notifications/dispatch")
+          body=$(mktemp)
+          status=$(curl --silent --show-error --max-time 120 --retry 2 --retry-delay 5             --output "$body" --write-out '%{http_code}'             --request POST             --header "Authorization: Bearer ${CRON_SECRET}"             "${API_URL%/}/api/internal/notifications/dispatch")
           echo "dispatch responded with HTTP ${status}"
-          [ "$status" = "200" ]
+          [ "$status" = "200" ] || exit 1
+          # Print only the five aggregate counters, each forced to a number: never the raw body.
+          counts=$(jq -c '{enqueued: (.enqueued|tonumber), sent: (.sent|tonumber),
+            retried: (.retried|tonumber), failed: (.failed|tonumber), skipped: (.skipped|tonumber)}' "$body")
+          echo "dispatch result: ${counts}"
+          processed=$(echo "$counts" | jq '.sent + .retried + .failed + .skipped')
+          failed=$(echo "$counts" | jq '.failed')
+          retried=$(echo "$counts" | jq '.retried')
+          echo "processed=${processed} failed=${failed} retried=${retried}"
+          # A 200 only means the tick ran. Surface deliveries that did not go out.
+          [ "$retried" -eq 0 ] || echo "::warning::${retried} notification(s) will be retried (provider unavailable)"
+          if [ "$failed" -gt 0 ]; then
+            echo "::error::${failed} notification(s) failed permanently; see the API logs (Notification delivery problem)"
+            exit 1
+          fi

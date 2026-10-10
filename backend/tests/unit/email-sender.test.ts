@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { parseEnv } from '../../src/config/env.js';
 import { createEmailSender, unconfiguredEmailSender } from '../../src/email/index.js';
 import { ResendEmailSender } from '../../src/email/resend.js';
-import { SmtpEmailSender } from '../../src/email/smtp.js';
+import { SmtpEmailSender, smtpDetail } from '../../src/email/smtp.js';
 import { EmailDeliveryError } from '../../src/email/types.js';
 
 const message = {
@@ -165,5 +165,102 @@ describe('createEmailSender with SMTP', () => {
       EMAIL_FROM: 'a@b.c',
     });
     expect(createEmailSender(env).configured).toBe(true);
+  });
+});
+
+describe('failure diagnostics (safe to log)', () => {
+  const failing = async (res: Response) =>
+    (await new ResendEmailSender(
+      're_key',
+      'a@b.c',
+      vi.fn(async () => res),
+    )
+      .send(message)
+      .catch((e: EmailDeliveryError) => e)) as EmailDeliveryError;
+
+  it('Resend: keeps the status and error name, never the provider message', async () => {
+    const err = await failing(
+      new Response(
+        JSON.stringify({
+          name: 'validation_error',
+          message: 'The pat@example.com domain is not verified',
+        }),
+        { status: 403 },
+      ),
+    );
+    expect(err.detail).toEqual({
+      provider: 'resend',
+      category: 'provider_rejected',
+      status: 403,
+      name: 'validation_error',
+    });
+    expect(JSON.stringify(err.detail)).not.toContain('pat@example.com');
+  });
+
+  it('Resend: ignores an error name that is not a plain identifier', async () => {
+    const err = await failing(new Response('{"name":"<script>x</script>"}', { status: 500 }));
+    expect(err.detail).toEqual({
+      provider: 'resend',
+      category: 'provider_unavailable',
+      status: 500,
+    });
+  });
+
+  it('Resend: tells a timeout from another network failure', async () => {
+    const timeout = new DOMException('timed out', 'TimeoutError');
+    const t = await new ResendEmailSender(
+      'k',
+      'a@b.c',
+      vi.fn(async () => Promise.reject(timeout)),
+    )
+      .send(message)
+      .catch((e: EmailDeliveryError) => e);
+    expect((t as EmailDeliveryError).detail).toMatchObject({ category: 'timeout' });
+    const n = await new ResendEmailSender(
+      'k',
+      'a@b.c',
+      vi.fn(async () => Promise.reject(new TypeError('x'))),
+    )
+      .send(message)
+      .catch((e: EmailDeliveryError) => e);
+    expect((n as EmailDeliveryError).detail).toMatchObject({ category: 'network' });
+  });
+
+  it.each([
+    ['ETIMEDOUT', undefined, 'timeout'],
+    ['ECONNREFUSED', undefined, 'connection_refused'],
+    ['ENOTFOUND', undefined, 'dns'],
+    ['EAUTH', 535, 'auth'],
+    [undefined, 421, 'smtp_4xx'],
+    [undefined, 550, 'smtp_5xx'],
+    ['weird code with spaces', undefined, 'unknown'],
+  ])('SMTP: %s / %s is categorised as %s', (code, responseCode, category) => {
+    const detail = smtpDetail(code, responseCode);
+    expect(detail.provider).toBe('smtp');
+    expect(detail.category).toBe(category);
+    // An unrecognisable code is dropped rather than logged.
+    if (code === 'weird code with spaces') expect(detail.code).toBeUndefined();
+  });
+
+  it('SMTP: a send failure carries detail and no server reply text', async () => {
+    const transport = {
+      sendMail: vi.fn(async () => {
+        throw Object.assign(
+          new Error('Connection timeout to smtp.example.com for pat@example.com'),
+          {
+            code: 'ETIMEDOUT',
+          },
+        );
+      }),
+    };
+    const err = (await new SmtpEmailSender(
+      { host: 'h', port: 465, secure: true, user: 'u', pass: 'p', from: 'a@b.c' },
+      transport as never,
+    )
+      .send(message)
+      .catch((e: EmailDeliveryError) => e)) as EmailDeliveryError;
+    expect(err.kind).toBe('unavailable');
+    expect(err.detail).toEqual({ provider: 'smtp', category: 'timeout', code: 'ETIMEDOUT' });
+    expect(JSON.stringify(err.detail)).not.toContain('pat@example.com');
   });
 });

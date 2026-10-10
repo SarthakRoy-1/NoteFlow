@@ -171,10 +171,12 @@ async function enqueueDue(deps: DispatchDeps, now: Date): Promise<number> {
 }
 
 type Delivery = typeof notificationDeliveries.$inferSelect;
+/** Safe-to-log facts about a failure (provider, category, code, status). Never content. */
+type Diagnostics = Record<string, string | number>;
 type Outcome =
   | { status: 'sent' }
-  | { status: 'skipped' | 'failed'; reason: string }
-  | { status: 'retry'; reason: string };
+  | { status: 'skipped' | 'failed'; reason: string; diag?: Diagnostics }
+  | { status: 'retry'; reason: string; diag?: Diagnostics };
 
 /** Step 2a: take a batch. SKIP LOCKED means two workers never hold the same row. */
 async function claim(db: Db, now: Date): Promise<Delivery[]> {
@@ -298,10 +300,14 @@ async function deliver(deps: DispatchDeps, d: Delivery, now: Date): Promise<Outc
       await email.send(reminderEmail(person.email, appBaseUrl, notice, d.id));
       return { status: 'sent' };
     } catch (err) {
+      const detail = err instanceof EmailDeliveryError ? err.detail : undefined;
+      const diag: Diagnostics | undefined = detail ? { ...detail } : undefined;
+      // The category is kept in the ledger too, so a failure is explained without the logs.
+      const suffix = detail ? `:${detail.category}` : '';
       if (err instanceof EmailDeliveryError && err.kind === 'rejected') {
-        return { status: 'failed', reason: 'rejected' }; // e.g. an address the provider refuses
+        return { status: 'failed', reason: `rejected${suffix}`, diag }; // e.g. a refused address
       }
-      return { status: 'retry', reason: 'unavailable' };
+      return { status: 'retry', reason: `unavailable${suffix}`, diag };
     }
   }
 
@@ -378,6 +384,26 @@ async function finish(
   return counted;
 }
 
+/**
+ * One line per notable outcome, correlated with the ledger by delivery id. It carries the channel,
+ * reason and provider diagnostics, never an address, a header or any reminder text.
+ */
+function logOutcome(d: Delivery, outcome: Outcome, counted: keyof DispatchResult) {
+  if (outcome.status === 'sent') {
+    logger.info('Notification sent', { channel: d.channel, deliveryId: d.id, attempt: d.attempts });
+    return;
+  }
+  if (outcome.status === 'skipped') return; // expected, and recorded in the ledger
+  logger.warn('Notification delivery problem', {
+    channel: d.channel,
+    deliveryId: d.id,
+    attempt: d.attempts,
+    result: counted,
+    reason: outcome.reason,
+    ...outcome.diag,
+  });
+}
+
 /** One scheduler tick. Everything it needs to remember lives in PostgreSQL. */
 export async function runDispatch(deps: DispatchDeps): Promise<DispatchResult> {
   const now = deps.now();
@@ -397,6 +423,7 @@ export async function runDispatch(deps: DispatchDeps): Promise<DispatchResult> {
       }
       const counted = await finish(deps.db, d, outcome, now);
       if (counted !== 'enqueued') result[counted]++;
+      logOutcome(d, outcome, counted);
     }
     if (batch.length < BATCH) break;
   }

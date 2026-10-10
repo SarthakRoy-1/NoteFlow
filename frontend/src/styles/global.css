@@ -449,13 +449,15 @@ select {
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  color: var(--ink-2);
+  color: var(--pen);
+  opacity: 0.75;
   text-decoration: none;
 }
 
 .shell-gear:hover,
+.shell-gear:focus-visible,
 .shell-gear[aria-current='page'] {
-  color: var(--pen);
+  opacity: 1;
 }
 
 .shell-gear:focus-visible,

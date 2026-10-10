@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { logger } from '../../src/lib/logger.js';
 import {
   notificationDeliveries,
   notificationPreferences,
@@ -315,6 +316,52 @@ describe('provider failures', () => {
     expect(email.sent).toHaveLength(1);
     [row] = await ledger();
     expect(row).toMatchObject({ status: 'sent', attempts: 2 });
+  });
+
+  it('records why a send failed in the ledger and logs only safe facts', async () => {
+    const { user } = await owner();
+    await seedReminder(db, user.id);
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const email = new FakeEmail();
+    email.failWith = new EmailDeliveryError('unavailable', {
+      provider: 'smtp',
+      category: 'timeout',
+      code: 'ETIMEDOUT',
+    });
+    await tick(db, { email });
+    const [row] = await ledger();
+    expect(row).toMatchObject({ status: 'pending', lastError: 'unavailable:timeout' });
+    const [message, meta] = warn.mock.calls[0] ?? [];
+    expect(message).toBe('Notification delivery problem');
+    expect(meta).toMatchObject({
+      channel: 'email',
+      deliveryId: row?.id,
+      attempt: 1,
+      result: 'retried',
+      provider: 'smtp',
+      category: 'timeout',
+      code: 'ETIMEDOUT',
+    });
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).not.toContain('@'); // no address
+    expect(logged).not.toContain(NOTE_TITLE);
+    expect(logged).not.toContain('Send the invoice');
+    warn.mockRestore();
+  });
+
+  it('logs a success line that matches the ledger', async () => {
+    const { user } = await owner();
+    await seedReminder(db, user.id);
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+    await tick(db, { email: new FakeEmail() });
+    const [row] = await ledger();
+    expect(row?.status).toBe('sent');
+    expect(info).toHaveBeenCalledWith('Notification sent', {
+      channel: 'email',
+      deliveryId: row?.id,
+      attempt: 1,
+    });
+    info.mockRestore();
   });
 
   it('does not retry a permanent rejection such as an invalid address', async () => {

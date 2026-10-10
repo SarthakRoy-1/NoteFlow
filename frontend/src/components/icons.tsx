@@ -1,16 +1,19 @@
 import type { ReactNode } from 'react';
 
-/** One stroke weight (1.6) on a 20px grid, so every icon reads as the same hand. Decorative only. */
-function Icon({ children }: { children: ReactNode }) {
+/**
+ * One stroke weight (1.6) on a 20px grid, so every icon reads as the same hand. Decorative only.
+ * `grid` lets an icon drawn on a 24px grid (e.g. Lucide's) keep the same rendered stroke weight.
+ */
+function Icon({ children, grid = 20 }: { children: ReactNode; grid?: number }) {
   return (
     <svg
       className="icon"
-      viewBox="0 0 20 20"
+      viewBox={`0 0 ${grid} ${grid}`}
       width="18"
       height="18"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.6"
+      strokeWidth={(1.6 * grid) / 20}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -49,10 +52,11 @@ export const AskIcon = () => (
   </Icon>
 );
 
+/** Lucide's "settings" gear (24px grid, ISC licence): a toothed wheel with a centre hole. */
 export const SettingsIcon = () => (
-  <Icon>
-    <circle cx="10" cy="10" r="2.6" />
-    <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" />
+  <Icon grid={24}>
+    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+    <circle cx="12" cy="12" r="3" />
   </Icon>
 );
 

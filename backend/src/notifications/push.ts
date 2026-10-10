@@ -71,6 +71,23 @@ export function isAllowedPushEndpoint(raw: string): boolean {
 
 const TIMEOUT_MS = 10_000;
 
+const safeCode = (code: unknown) =>
+  typeof code === 'string' && /^[A-Z_]{2,24}$/.test(code) ? code : undefined;
+
+/**
+ * The push service's own reason (e.g. "VapidPkHashMismatch", "BadJwtToken") is what tells a
+ * misconfigured key from an expired device. Only a short, printable excerpt is kept.
+ */
+function pushReason(err: unknown): string | undefined {
+  const body = (err as { body?: unknown }).body;
+  if (typeof body !== 'string') return undefined;
+  const text = [...body]
+    .filter((ch) => ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) < 127)
+    .join('')
+    .slice(0, 160);
+  return text || undefined;
+}
+
 export class WebPushSender implements PushSender {
   readonly configured = true;
 
@@ -105,11 +122,22 @@ export class WebPushSender implements PushSender {
       return 'sent';
     } catch (err) {
       const status = err instanceof webpush.WebPushError ? err.statusCode : undefined;
-      if (status === 404 || status === 410) return 'gone';
-      if (status !== undefined && status >= 400 && status < 500 && status !== 429) {
-        return 'rejected';
-      }
-      return 'unavailable';
+      const outcome: PushOutcome =
+        status === 404 || status === 410
+          ? 'gone'
+          : status !== undefined && status >= 400 && status < 500 && status !== 429
+            ? 'rejected'
+            : 'unavailable';
+      logger.warn('Web Push delivery failed', {
+        outcome,
+        // Host only: the path of a push endpoint is a bearer secret for that device.
+        host: new URL(target.endpoint).hostname,
+        status,
+        code: safeCode((err as { code?: unknown }).code),
+        reason: pushReason(err),
+        topic: options.topic,
+      });
+      return outcome;
     }
   }
 }
