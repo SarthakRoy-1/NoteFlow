@@ -2125,3 +2125,14 @@ select {
   font-size: 0.9375rem;
   font-weight: 600;
 }
+
+/* The global input rule (width: 100%, padding) would stretch a checkbox away from its label. */
+.check-row input[type='checkbox'],
+.remember-me input[type='checkbox'] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--accent, currentColor);
+}
