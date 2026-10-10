@@ -80,7 +80,15 @@ After editing `backend/src/db/schema.ts`, generate a new migration and commit it
 npm run db:generate -w backend
 ```
 
-This Docker file is development infrastructure only; it is not the Docker deliverable.
+`docker-compose.dev.yml` is the development database only. The full stack (PostgreSQL + API + web) is `docker-compose.yml`:
+
+```bash
+# .env needs POSTGRES_PASSWORD and SESSION_SECRET (and Google/Groq keys to sign in and use AI)
+docker compose up --build
+# open http://localhost:8080  (add http://localhost:8080/api/auth/google/callback to your OAuth client)
+```
+
+The API container applies migrations on start; `NODE_ENV=development` inside this compose file is only so the session cookie works over plain http.
 
 ### 3. Google OAuth (local setup)
 
@@ -242,6 +250,6 @@ cookie, origin check) but not yet on the hosted services.
 - Real-device mobile browsers, a deployed host, and Google account linking from Settings have not been tested.
 - AI calls are made while the request waits (note save and Ask AI), with a limit per attempt (12 s Gemini, 20 s Groq) and at most one retry, only on a server or network error.
 - Ask AI retrieval is keyword based (PostgreSQL full text), not semantic.
-- Not built (bonus items): "needs a time" state, recurring reminders, notifying another user, Docker deliverable.
+- Not built (bonus items): recurring reminders, notifying another user.
 - A reminder with no time is shown as "No time set" and never alerts.
 - Live AI checks so far: one extraction and one Ask AI request against Groq on an isolated test database.

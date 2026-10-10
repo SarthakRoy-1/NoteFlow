@@ -1,0 +1,22 @@
+# API image: builds the backend workspace and runs migrations before starting.
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY backend/package.json backend/
+COPY frontend/package.json frontend/
+RUN npm ci --include=dev
+COPY backend backend
+RUN npm run build -w backend
+
+FROM node:22-alpine
+ENV NODE_ENV=production
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/
+COPY frontend/package.json frontend/
+RUN npm ci --omit=dev -w backend --include-workspace-root=false
+COPY --from=build /app/backend/dist backend/dist
+COPY backend/drizzle backend/drizzle
+USER node
+EXPOSE 3001
+CMD ["sh", "-c", "node backend/dist/db/migrate.js && node backend/dist/server.js"]
