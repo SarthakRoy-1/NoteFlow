@@ -8,6 +8,7 @@ import { isValidIanaTimezone } from '../lib/timezone.js';
 import { logger } from '../lib/logger.js';
 import { isUniqueViolation, upsertGoogleUser } from '../modules/users/users.repo.js';
 import {
+  CALENDAR_COOKIE,
   OAUTH_COOKIE,
   SESSION_COOKIE,
   clearOptions,
@@ -18,7 +19,8 @@ import type { GoogleAuth } from './google.js';
 import { authNotConfigured } from './google.js';
 import { consumeLinkAttempt, deletePendingForEmail } from './accountTokens.js';
 import { finishGoogleLink } from './link.routes.js';
-import { createSession, deleteSession, hashToken } from './sessions.js';
+import { createSession, deleteSession, findUserByToken, hashToken } from './sessions.js';
+import { storeCalendarConnection } from '../calendar/calendarSync.js';
 
 export interface AuthRouterDeps {
   env: Env;
@@ -35,6 +37,13 @@ const oauthPayload = z.object({
   tz: z.string().optional(),
   /** "Remember me", fixed at sign-in start. Lives only inside the signed cookie, never in the callback URL. */
   remember: z.boolean().optional(),
+});
+
+const calendarPayload = z.object({
+  state: z.string().min(1),
+  codeVerifier: z.string().min(1),
+  nonce: z.string().min(1),
+  userId: z.string().uuid(),
 });
 
 const safeEqual = (a: string, b: string) => {
@@ -88,6 +97,16 @@ export function authRouter({ env, db, getGoogle, now = () => new Date() }: AuthR
         url.search = new URL(req.originalUrl, 'http://placeholder.invalid').search;
         return url;
       };
+
+      // "Connect Google Calendar" consent shares this redirect URI; it is told apart by its own signed
+      // cookie. It is handled first so a declined consent (?error=...) is not read as a failed login.
+      const calendarRaw: unknown = req.signedCookies?.[CALENDAR_COOKIE];
+      if (typeof calendarRaw === 'string' && typeof req.query.state === 'string') {
+        const calendar = calendarPayload.safeParse(safeJson(calendarRaw));
+        if (calendar.success && safeEqual(req.query.state, calendar.data.state)) {
+          return await finishCalendar(req, res, calendar.data, buildCallbackUrl);
+        }
+      }
 
       // "Connect Google" attempts share this redirect URI; their one-time state is stored server-side.
       if (env.ENABLE_PASSWORD_AUTH && typeof req.query.state === 'string') {
@@ -157,6 +176,51 @@ export function authRouter({ env, db, getGoogle, now = () => new Date() }: AuthR
       failLogin(res, 'login_failed');
     }
   });
+
+  const settingsUrl = (result: string) => `${env.APP_BASE_URL}/settings?calendar=${result}`;
+
+  /**
+   * Second half of "Connect Google Calendar". Only the signed-in user who started it can finish it,
+   * the grant must belong to that user's own Google account, and it must really include Calendar
+   * access (the consent screen lets people untick it).
+   */
+  async function finishCalendar(
+    req: import('express').Request,
+    res: Response,
+    checks: z.infer<typeof calendarPayload>,
+    buildCallbackUrl: () => URL,
+  ) {
+    res.clearCookie(CALENDAR_COOKIE, clearOptions(oauthCookieOptions(env)));
+    const token: unknown = req.cookies?.[SESSION_COOKIE];
+    const user =
+      typeof token === 'string' && token !== '' ? await findUserByToken(db, token) : null;
+    if (!user || user.id !== checks.userId) return res.redirect(302, settingsUrl('error'));
+    if (typeof req.query.error === 'string') return res.redirect(302, settingsUrl('declined'));
+    try {
+      const grant = await getGoogle().completeCalendarAuthorization(buildCallbackUrl(), {
+        state: checks.state,
+        codeVerifier: checks.codeVerifier,
+        nonce: checks.nonce,
+      });
+      if (!grant.emailVerified || grant.email.toLowerCase() !== user.email.toLowerCase()) {
+        return res.redirect(302, settingsUrl('mismatch'));
+      }
+      if (!grant.scope.split(' ').includes(env.GOOGLE_CALENDAR_SCOPE)) {
+        return res.redirect(302, settingsUrl('declined'));
+      }
+      if (!grant.refreshToken) return res.redirect(302, settingsUrl('error'));
+      await storeCalendarConnection(db, env.SESSION_SECRET, {
+        userId: user.id,
+        refreshToken: grant.refreshToken,
+        scope: grant.scope,
+        googleEmail: grant.email,
+      });
+      return res.redirect(302, settingsUrl('connected'));
+    } catch (err) {
+      logger.warn('Google Calendar connection failed', { name: (err as Error).name });
+      return res.redirect(302, settingsUrl('error'));
+    }
+  }
 
   // Safe to call when already signed out.
   router.post('/logout', async (req, res) => {

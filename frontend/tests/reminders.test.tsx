@@ -286,14 +286,20 @@ describe('editing', () => {
     expect(patches(api, r.id)[0]?.body).toEqual({ due: { date: '2099-05-06', time: '09:30' } });
   });
 
-  it('clears the due date', async () => {
+  it('will not clear the due date: a reminder keeps a date and a time', async () => {
     const { api, r } = await openEditor({ dueAt: FUTURE });
     await userEvent.clear(screen.getByLabelText('Due date'));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(patches(api, r.id)).toHaveLength(1));
-    expect(patches(api, r.id)[0]?.body).toEqual({ due: null });
-    await waitFor(() => expect(row('Send invoice').getByText('No time set')).toBeInTheDocument());
-    expect(screen.getByRole('region', { name: 'No time set' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/needs both a date and a time/i);
+    expect(patches(api, r.id)).toHaveLength(0);
+  });
+
+  it('will not save a date without a time', async () => {
+    const { api, r } = await openEditor({ dueAt: FUTURE });
+    await userEvent.clear(screen.getByLabelText(/due time/i));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/needs both a date and a time/i);
+    expect(patches(api, r.id)).toHaveLength(0);
   });
 
   it('validates an empty text without calling the server', async () => {

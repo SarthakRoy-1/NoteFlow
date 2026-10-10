@@ -5,6 +5,7 @@ import {
   toExtractionError,
 } from '../../ai/extraction/extractor.js';
 import type { AIProvider } from '../../ai/provider/index.js';
+import type { CalendarSync } from '../../calendar/calendarSync.js';
 import type { Db } from '../../db/client.js';
 import { notes } from '../../db/schema.js';
 import { logger } from '../../lib/logger.js';
@@ -16,6 +17,8 @@ export interface AnalysisDeps {
   ai: AIProvider;
   now: () => Date;
   limiter: RateLimiter;
+  /** Optional: when present, saved reminders are mirrored into the owner's Google Calendar. */
+  sync?: CalendarSync;
 }
 
 export interface AnalysisOwner {
@@ -69,8 +72,14 @@ export async function analyzeNote(
       noteId,
       expectedUpdatedAt: note.updatedAt,
       items,
+      timezone: owner.timezone,
     });
-    if (outcome.status === 'applied') return 'ok';
+    if (outcome.status === 'applied') {
+      // After the commit: a calendar problem can never undo or fail the saved analysis.
+      await deps.sync?.removeEvents(owner.id, outcome.removedEventIds);
+      await deps.sync?.syncNote(owner.id, noteId);
+      return 'ok';
+    }
     return outcome.status === 'superseded' ? 'superseded' : 'missing';
   } catch (err) {
     const failure = toExtractionError(err);

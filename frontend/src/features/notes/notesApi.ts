@@ -11,6 +11,8 @@ export interface Analysis {
   /** How many todos / reminders currently derive from this note. */
   todos: number;
   reminders: number;
+  /** Reminders found in the note that still need a date and time (older servers omit this). */
+  pendingReminders?: number;
 }
 
 export interface Note {

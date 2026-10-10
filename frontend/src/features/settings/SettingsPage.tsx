@@ -1,6 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { CloseIcon } from '../../components/icons';
 import { readTheme, saveTheme, type ThemeChoice } from '../../lib/theme';
 import { useAuthConfig, useMe, useUpdateTimezone } from '../auth/useAuth';
+import { CalendarSettings } from '../calendar/CalendarSettings';
+import { LegalLinks } from '../legal/LegalLinks';
 import { NotificationSettings } from '../notifications/NotificationSettings';
 import { errorMessage } from '../notes/useNotes';
 import { SignInMethods } from './SignInMethods';
@@ -48,6 +52,20 @@ export function SettingsPage() {
   const value = choice ?? saved;
   const device = deviceTimezone();
 
+  // Closing returns to wherever the user came from (the gear and name links push a history entry),
+  // or to Notes when Settings was opened directly. An unsaved time-zone choice is never dropped
+  // silently: the user is asked first.
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  const confirmRef = useRef<HTMLDivElement>(null);
+  const unsaved = choice !== null && choice !== saved;
+  const leave = () => (location.key !== 'default' ? navigate(-1) : navigate('/notes'));
+  const close = () => (unsaved ? setConfirmingClose(true) : leave());
+  useEffect(() => {
+    if (confirmingClose) confirmRef.current?.focus();
+  }, [confirmingClose]);
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
     save.mutate(value, { onSuccess: () => setChoice(null) });
@@ -55,9 +73,31 @@ export function SettingsPage() {
 
   return (
     <section className="settings-page" aria-label="Settings">
-      <div className="pane-header">
+      <div className="pane-header settings-header">
         <h1>Settings</h1>
+        <button type="button" className="icon-button" onClick={close} aria-label="Close settings">
+          <CloseIcon />
+        </button>
       </div>
+      {confirmingClose && (
+        <div
+          ref={confirmRef}
+          tabIndex={-1}
+          role="alertdialog"
+          aria-label="Unsaved changes"
+          className="alert unsaved-close"
+        >
+          <p>You have an unsaved time zone change. Close Settings and discard it?</p>
+          <div className="actions">
+            <button type="button" className="button" onClick={() => setConfirmingClose(false)}>
+              Keep editing
+            </button>
+            <button type="button" className="button button-primary" onClick={leave}>
+              Discard and close
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="settings-row">
         <div className="settings-label">
@@ -136,6 +176,8 @@ export function SettingsPage() {
         </div>
       </form>
 
+      <CalendarSettings />
+
       <NotificationSettings />
 
       <div className="settings-row">
@@ -164,6 +206,10 @@ export function SettingsPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="settings-legal">
+        <LegalLinks />
       </div>
     </section>
   );

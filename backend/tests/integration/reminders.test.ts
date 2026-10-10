@@ -199,7 +199,7 @@ describe('GET /api/reminders', () => {
     });
   });
 
-  it('keeps a date-only AI reminder date-only (start of the local day, no invented time)', async () => {
+  it('does not turn a date-only AI reminder into a reminder (no time is invented)', async () => {
     const { app, ai } = setup();
     ai.respondWith(
       reply(
@@ -218,11 +218,17 @@ describe('GET /api/reminders', () => {
       .post('/api/notes')
       .set('Cookie', u.cookie)
       .send({ title: 'Visa', content: 'remind me to renew the visa tomorrow' });
-    const [r] = (await request(app).get('/api/reminders').set('Cookie', u.cookie)).body.reminders;
-    expect(r).toMatchObject({ dueHasTime: false, dueAt: '2026-10-08T15:00:00.000Z' }); // 00:00 JST
+    expect(
+      (await request(app).get('/api/reminders').set('Cookie', u.cookie)).body.reminders,
+    ).toEqual([]);
+    const drafts = (await request(app).get('/api/reminder-drafts').set('Cookie', u.cookie)).body
+      .drafts;
+    expect(drafts).toEqual([
+      expect.objectContaining({ text: 'Renew the visa', suggestedDate: '2026-10-09' }),
+    ]);
   });
 
-  it('a reminder with no time is listed with dueAt null', async () => {
+  it('a reminder with no date or time is a pending reminder, not a listed reminder', async () => {
     const { app, ai } = setup();
     ai.respondWith(
       reply(item({ kind: 'reminder', text: 'Call mum', evidence: 'remind me to call mum' })),
@@ -232,8 +238,12 @@ describe('GET /api/reminders', () => {
       .post('/api/notes')
       .set('Cookie', u.cookie)
       .send({ title: 'Mum', content: 'remind me to call mum' });
-    const [r] = (await request(app).get('/api/reminders').set('Cookie', u.cookie)).body.reminders;
-    expect(r).toMatchObject({ text: 'Call mum', dueAt: null, person: null });
+    expect(
+      (await request(app).get('/api/reminders').set('Cookie', u.cookie)).body.reminders,
+    ).toEqual([]);
+    const drafts = (await request(app).get('/api/reminder-drafts').set('Cookie', u.cookie)).body
+      .drafts;
+    expect(drafts).toEqual([expect.objectContaining({ text: 'Call mum', person: null })]);
   });
 
   it('disappears from the list when its source note is deleted', async () => {
@@ -431,13 +441,11 @@ describe('PATCH /api/reminders/:id', () => {
     expect((await row(r.id))?.person).toBeNull();
   });
 
-  it('sets a date-only due date at the START of that day in the user timezone, with no time', async () => {
-    const { patch } = await one();
+  it('refuses a date-only due date: a reminder needs a time too', async () => {
+    const { patch, r } = await one();
     const res = await patch({ due: { date: '2026-10-09' } });
-    expect(res.body.reminder).toMatchObject({
-      dueHasTime: false,
-      dueAt: '2026-10-08T18:30:00.000Z', // 00:00 IST on 9 Oct
-    });
+    expect(res.status).toBe(422);
+    expect(await row(r.id)).toMatchObject({ dueAt: r.dueAt });
   });
 
   it('sets a due date and time in the user timezone', async () => {
@@ -459,14 +467,11 @@ describe('PATCH /api/reminders/:id', () => {
     );
   });
 
-  it('clears the due date with null (it will then never alert)', async () => {
-    const { patch, r, app, u } = await one({ dueAt: PAST });
+  it('refuses to clear the due date: a reminder always keeps a date and time', async () => {
+    const { patch, r } = await one({ dueAt: PAST });
     const res = await patch({ due: null });
-    expect(res.body.reminder).toMatchObject({ dueAt: null, dueHasTime: false });
-    expect(await row(r.id)).toMatchObject({ dueAt: null, userModified: true });
-    expect(
-      (await request(app).get('/api/reminders/due').set('Cookie', u.cookie)).body.reminders,
-    ).toEqual([]);
+    expect(res.status).toBe(422);
+    expect((await row(r.id))?.dueAt?.toISOString()).toBe(PAST.toISOString());
   });
 
   it('acknowledging and re-opening persists status and timestamp', async () => {
@@ -597,7 +602,7 @@ describe('PATCH /api/reminders/:id', () => {
       { text: 'hijack' },
       { person: 'Mallory' },
       { acknowledged: true },
-      { due: { date: '2026-10-09' } },
+      { due: { date: '2026-10-09', time: '10:00' } },
     ]) {
       const res = await request(app)
         .patch(`/api/reminders/${r.id}`)
@@ -733,14 +738,23 @@ describe('interaction with re-analysis (Phase 3 semantics preserved)', () => {
   async function createWithReminder() {
     const { app, ai } = setup();
     ai.respondWith(
-      reply(item({ kind: 'reminder', text: 'Call mum', evidence: 'remind me to call mum' })),
+      reply(
+        item({
+          kind: 'reminder',
+          text: 'Call mum',
+          evidence: 'remind me to call mum at 5pm on 9 oct',
+          due_kind: 'datetime',
+          due_expression: 'at 5pm on 9 oct',
+          due_local: '2026-10-09T17:00',
+        }),
+      ),
       reply(),
     );
     const u = await createUserWithSession(db);
     const created = await request(app)
       .post('/api/notes')
       .set('Cookie', u.cookie)
-      .send({ title: 'T', content: 'remind me to call mum' });
+      .send({ title: 'T', content: 'remind me to call mum at 5pm on 9 oct' });
     const [r] = await db.select().from(reminders);
     return { app, u, noteId: created.body.note.id as string, reminderId: r?.id ?? '' };
   }

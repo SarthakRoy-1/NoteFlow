@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { CalendarSync } from '../../calendar/calendarSync.js';
 import type { Db } from '../../db/client.js';
 import { AppError, notFound } from '../../lib/errors.js';
 import type { RateLimiter } from '../../lib/rateLimit.js';
@@ -21,12 +22,14 @@ export interface RemindersDeps {
   now: () => Date;
   /** Caps how fast one user can look up other accounts by email. */
   shareLimiter: RateLimiter;
+  /** Mirrors saved reminders into the user's Google Calendar (a no-op without a connection). */
+  sync: CalendarSync;
 }
 
 /**
  * Mounted behind requireAuth. Identity always comes from the session, never from the request.
  */
-export function remindersRouter({ db, now, shareLimiter }: RemindersDeps) {
+export function remindersRouter({ db, now, shareLimiter, sync }: RemindersDeps) {
   const router = Router();
 
   const load = async (userId: string, id: string) => {
@@ -53,11 +56,32 @@ export function remindersRouter({ db, now, shareLimiter }: RemindersDeps) {
     const id = parseReminderId(req.params.id);
     const input = updateReminderBody.parse(req.body);
 
+    // A reminder always keeps a valid date AND time: it cannot be cleared or reduced to a date.
+    // (Only reminders created before this rule can lack one; they stay editable otherwise.)
+    if (input.due === null) {
+      throw new AppError(
+        'VALIDATION_FAILED',
+        422,
+        'A reminder needs a date and a time. Delete the reminder instead of clearing its date.',
+      );
+    }
+    if (input.due !== undefined && !input.due.time) {
+      throw new AppError('VALIDATION_FAILED', 422, 'A reminder needs a time as well as a date.');
+    }
+    if (input.recurrence && input.due === undefined) {
+      const current = await load(user.id, id);
+      if (!current.dueAt || !current.dueHasTime) {
+        throw new AppError(
+          'VALIDATION_FAILED',
+          422,
+          'Set a date and time before making a reminder repeat.',
+        );
+      }
+    }
+
     // The due date is interpreted in the user's own timezone, taken from their account.
     let due: ResolvedDue | undefined;
-    if (input.due === null) {
-      due = { dueAt: null, dueHasTime: false };
-    } else if (input.due !== undefined) {
+    if (input.due !== undefined) {
       const resolved = resolveReminderDue(input.due, user.timezone);
       if (!resolved) {
         throw new AppError('VALIDATION_FAILED', 422, 'That is not a valid due date.');
@@ -80,16 +104,18 @@ export function remindersRouter({ db, now, shareLimiter }: RemindersDeps) {
       user.timezone,
     );
     if (!updated) throw notFound(REMINDER_NOT_FOUND);
+    // Keeps the one calendar event for this reminder in step with the edit (never a second event).
+    await sync.syncReminder(user.id, id);
     res.json({ reminder: await load(user.id, id) });
   });
 
   router.delete('/:id', async (req, res) => {
-    const deleted = await repo.deleteReminder(
-      db,
-      currentUser(req).id,
-      parseReminderId(req.params.id),
-    );
+    const userId = currentUser(req).id;
+    const id = parseReminderId(req.params.id);
+    const eventIds = await sync.eventIdsForReminders(userId, [id]);
+    const deleted = await repo.deleteReminder(db, userId, id);
     if (!deleted) throw notFound(REMINDER_NOT_FOUND);
+    await sync.removeEvents(userId, eventIds);
     res.status(204).end();
   });
 

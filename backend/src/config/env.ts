@@ -37,6 +37,13 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: optionalString,
   GOOGLE_CLIENT_SECRET: optionalString,
   GOOGLE_REDIRECT_URI: optionalString,
+  // The Calendar permission requested when a user connects Google Calendar (never at sign-in).
+  // The narrowest scope that can create events on the user's own calendar; set
+  // https://www.googleapis.com/auth/calendar.events if Google rejects it for your project.
+  GOOGLE_CALENDAR_SCOPE: z.preprocess(
+    blankToUndefined,
+    z.string().url().default('https://www.googleapis.com/auth/calendar.events.owned'),
+  ),
   // Assignment compliance: custom email/password auth is OFF unless explicitly enabled. Only the
   // exact string `true` turns it on; anything else (including unset) leaves it off.
   ENABLE_PASSWORD_AUTH: z.preprocess(

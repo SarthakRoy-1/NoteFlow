@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
-import { notes, reminders, todos } from '../../db/schema.js';
+import { notes, reminderDrafts, reminders, todos } from '../../db/schema.js';
 import type { CreateNoteInput, UpdateNoteInput } from './notes.schemas.js';
 
 type NoteRow = typeof notes.$inferSelect;
@@ -12,6 +12,8 @@ export interface AnalysisDto {
   /** How many todos / reminders currently derive from this note. */
   todos: number;
   reminders: number;
+  /** Reminders found in the note that still need a date and time from the user. */
+  pendingReminders: number;
 }
 
 export interface NoteDto {
@@ -36,12 +38,18 @@ export interface NoteWithCounts {
   row: NoteRow;
   todos: number;
   reminders: number;
+  pendingReminders: number;
 }
 
 const PREVIEW_LENGTH = 160;
 const LIST_LIMIT = 500;
 
-export const toNoteDto = ({ row, todos: t, reminders: r }: NoteWithCounts): NoteDto => ({
+export const toNoteDto = ({
+  row,
+  todos: t,
+  reminders: r,
+  pendingReminders: p,
+}: NoteWithCounts): NoteDto => ({
   id: row.id,
   title: row.title,
   content: row.content,
@@ -52,6 +60,7 @@ export const toNoteDto = ({ row, todos: t, reminders: r }: NoteWithCounts): Note
     error: row.analysisStatus === 'failed' ? row.analysisError : null,
     todos: t,
     reminders: r,
+    pendingReminders: p,
   },
 });
 
@@ -97,7 +106,11 @@ export async function getNoteWithCounts(
     .select({ n: sql<number>`count(*)::int` })
     .from(reminders)
     .where(and(eq(reminders.sourceNoteId, id), eq(reminders.userId, userId)));
-  return { row, todos: t?.n ?? 0, reminders: r?.n ?? 0 };
+  const [p] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(reminderDrafts)
+    .where(and(eq(reminderDrafts.sourceNoteId, id), eq(reminderDrafts.userId, userId)));
+  return { row, todos: t?.n ?? 0, reminders: r?.n ?? 0, pendingReminders: p?.n ?? 0 };
 }
 
 export async function getNote(db: Db, userId: string, id: string): Promise<NoteDto | null> {

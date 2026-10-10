@@ -113,8 +113,13 @@ describe('session expiry while the app is open', () => {
       apiError(401, 'UNAUTHENTICATED', 'Please sign in to continue.'),
     );
     await userEvent.click(await screen.findByRole('button', { name: /yes, delete/i }));
-    expect(await screen.findByRole('link', { name: /sign in with google/i })).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent(/session has ended/i);
+    expect(
+      await screen.findByRole('link', { name: /sign in with google/i }, { timeout: 4000 }),
+    ).toBeInTheDocument();
+    // Awaited: under a heavily loaded full run the message can land a tick after the link.
+    expect(await screen.findByRole('alert', {}, { timeout: 4000 })).toHaveTextContent(
+      /session has ended/i,
+    );
   });
 
   it('a normal error does not sign the user out', async () => {

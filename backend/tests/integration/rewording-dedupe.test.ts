@@ -288,11 +288,22 @@ describe('genuinely different actions are never merged', () => {
   it('keeps reminders for different people apart even with identical wording', async () => {
     const ctx = setup();
     const u = await createUserWithSession(db);
+    // Reminders need a date and time to be saved, so each of these carries one.
+    const timed = (text: string, evidence: string, person: string) =>
+      item({
+        kind: 'reminder',
+        text,
+        evidence,
+        person,
+        due_kind: 'datetime',
+        due_expression: 'at 5pm on 9 Oct',
+        due_local: '2026-10-09T17:00',
+      });
     const noteId = await createNote(
       ctx,
       u.cookie,
-      'Remind John to send the invoice',
-      reminderItem('Send the invoice', 'remind john to send the invoice', 'John'),
+      'Remind John to send the invoice at 5pm on 9 Oct',
+      timed('Send the invoice', 'remind john to send the invoice', 'John'),
     );
     const [created] = await db.select().from(reminders);
     await request(ctx.app)
@@ -303,9 +314,9 @@ describe('genuinely different actions are never merged', () => {
       ctx,
       u.cookie,
       noteId,
-      'Remind John to send the invoice. Remind Mary to send the invoice.',
-      reminderItem('Send invoice', 'remind john to send the invoice', 'John'),
-      reminderItem('Send the invoice', 'remind mary to send the invoice', 'Mary'),
+      'Remind John to send the invoice at 5pm on 9 Oct. Remind Mary to send the invoice at 5pm on 9 Oct.',
+      timed('Send invoice', 'remind john to send the invoice', 'John'),
+      timed('Send the invoice', 'remind mary to send the invoice', 'Mary'),
     );
     const rows = await db.select().from(reminders);
     expect(rows.map((r) => [r.content, r.person]).sort()).toEqual([

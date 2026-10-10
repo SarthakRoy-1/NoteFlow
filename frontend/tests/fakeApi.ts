@@ -5,6 +5,18 @@ export interface FakeAnalysis {
   error: string | null;
   todos: number;
   reminders: number;
+  pendingReminders?: number;
+}
+
+/** A reminder the AI found that still needs a date and time (GET /api/reminder-drafts). */
+export interface FakeDraft {
+  id: string;
+  text: string;
+  person: string | null;
+  suggestedDate: string | null;
+  recurrence: { days: number[] } | null;
+  sourceNote: { id: string; title: string };
+  createdAt: string;
 }
 
 export interface FakeNote {
@@ -91,6 +103,21 @@ export class FakeApi {
   notes: FakeNote[] = [];
   todos: FakeTodo[] = [];
   reminders: FakeReminder[] = [];
+  drafts: FakeDraft[] = [];
+  /** GET /api/calendar/status. Tests change it directly. */
+  calendar: {
+    available: boolean;
+    connected: boolean;
+    status: 'connected' | 'needs_reconnect' | null;
+    googleEmail: string | null;
+  } = { available: true, connected: false, status: null, googleEmail: null };
+  /** What each POST /api/calendar/sync returns, in order (then "nothing to do"). */
+  syncResults: {
+    result: 'ok' | 'not_connected' | 'needs_reconnect';
+    synced: number;
+    failed: number;
+    remaining: number;
+  }[] = [];
   /** Reminders other users shared with the signed-in user. */
   sharedWithMe: FakeShared[] = [];
   asks: FakeAsk[] = [];
@@ -453,6 +480,51 @@ export class FakeApi {
         (a, b) => rank(a) - rank(b) || (a.dueAt ?? '9999').localeCompare(b.dueAt ?? '9999'),
       );
       return json({ reminders: sorted });
+    }
+    if (url === '/api/reminder-drafts' && method === 'GET') {
+      return json({ drafts: this.drafts });
+    }
+    const draftMatch = /^\/api\/reminder-drafts\/([^/]+)(\/complete)?$/.exec(url);
+    if (draftMatch) {
+      const draft = this.drafts.find((d) => d.id === draftMatch[1]);
+      if (!draft) return apiError(404, 'NOT_FOUND', 'We could not find that pending reminder.');
+      if (method === 'DELETE') {
+        this.drafts = this.drafts.filter((d) => d.id !== draft.id);
+        return new Response(null, { status: 204 });
+      }
+      if (method === 'POST' && draftMatch[2]) {
+        if (!body?.time) return apiError(422, 'VALIDATION_FAILED', 'Choose a time.');
+        this.drafts = this.drafts.filter((d) => d.id !== draft.id);
+        const reminder: FakeReminder = {
+          id: `rem-from-${draft.id}`,
+          text: draft.text,
+          person: draft.person,
+          dueAt: `${body.date ?? '2026-10-09'}T${body.time}:00.000Z`,
+          dueHasTime: true,
+          recurrence: draft.recurrence ? { days: draft.recurrence.days, time: body.time } : null,
+          status: 'pending',
+          acknowledgedAt: null,
+          createdByAi: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          sourceNote: draft.sourceNote,
+          sharedWith: [],
+        };
+        this.reminders.push(reminder);
+        return json({ reminder }, 201);
+      }
+    }
+    if (url === '/api/calendar/status' && method === 'GET') return json(this.calendar);
+    if (url === '/api/calendar/connect' && method === 'POST') {
+      return json({ url: 'https://accounts.example.test/calendar-consent' });
+    }
+    if (url === '/api/calendar/sync' && method === 'POST') {
+      const next = this.syncResults.shift() ?? { result: 'ok', synced: 0, failed: 0, remaining: 0 };
+      return json(next);
+    }
+    if (url === '/api/calendar/disconnect' && method === 'POST') {
+      this.calendar = { ...this.calendar, connected: false, status: null, googleEmail: null };
+      return new Response(null, { status: 204 });
     }
     if (url === '/api/shared-reminders' && method === 'GET') {
       return json({ shared: this.sharedWithMe, nextDueAt: null });

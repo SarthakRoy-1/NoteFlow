@@ -3,6 +3,8 @@ import type { Env } from '../config/env.js';
 
 export const SESSION_COOKIE = 'noteflow_session';
 export const OAUTH_COOKIE = 'noteflow_oauth';
+/** Same shape and lifetime as OAUTH_COOKIE, for the separate "connect Google Calendar" consent. */
+export const CALENDAR_COOKIE = 'noteflow_calendar';
 
 /** No `expiresAt` = a browser-session cookie (dropped when the browser closes). */
 export function sessionCookieOptions(env: Env, expiresAt?: Date): CookieOptions {

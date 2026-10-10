@@ -50,6 +50,13 @@
       "when": 1791616421482,
       "tag": "0006_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791641549170,
+      "tag": "0007_calendar_and_reminder_drafts",
+      "breakpoints": true
     }
   ]
 }

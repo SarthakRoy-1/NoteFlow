@@ -244,6 +244,15 @@ export async function updateReminder(
       set.person = changes.person;
       set.userModified = true;
     }
+    // Anything that shows up in a calendar event makes the stored event stale.
+    if (
+      changes.text !== undefined ||
+      changes.person !== undefined ||
+      changes.due !== undefined ||
+      changes.recurrence !== undefined
+    ) {
+      set.calendarSyncedAt = null;
+    }
 
     const touchesSchedule = changes.due !== undefined || changes.recurrence !== undefined;
     if (touchesSchedule) {

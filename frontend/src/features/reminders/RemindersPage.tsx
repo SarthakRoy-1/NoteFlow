@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { ApiError } from '../../lib/api';
 import { useMe } from '../auth/useAuth';
 import { SharedWithYou } from '../shares/SharedWithYou';
+import { PendingReminders } from './PendingReminders';
 import { ReminderItem, isReminderDue } from './ReminderItem';
 import type { Reminder } from './remindersApi';
 import { useDueReminders, useReminders } from './useReminders';
@@ -97,6 +98,7 @@ export function RemindersPage() {
         <h1>Reminders</h1>
       </div>
       <SharedWithYou timezone={timezone} />
+      <PendingReminders timezone={timezone} />
       {body}
     </section>
   );

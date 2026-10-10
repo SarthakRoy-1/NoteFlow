@@ -234,6 +234,10 @@ export const reminders = pgTable(
     /** The AI's own wording, kept when the user edits `content`, so a reworded copy can be recognised. */
     aiText: text('ai_text'),
     userModified: boolean('user_modified').notNull().default(false),
+    /** The Google Calendar event mirroring this reminder (NULL = none yet / not connected). */
+    googleEventId: text('google_event_id'),
+    /** When the calendar event last matched this row; the event is stale while it is before updated_at. */
+    calendarSyncedAt: timestamptz('calendar_synced_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -284,6 +288,59 @@ export const aiDismissed = pgTable(
     }).onDelete('cascade'),
   ],
 );
+
+/**
+ * A reminder the AI found in a note but which has no valid date AND time yet. It is NOT a reminder:
+ * it never alerts, never reaches the calendar and never appears in reminder lists. The user supplies
+ * the missing date/time (completing it creates a real reminder) or dismisses it. The note itself is
+ * always kept.
+ */
+export const reminderDrafts = pgTable(
+  'reminder_drafts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    sourceNoteId: uuid('source_note_id').notNull(),
+    content: text('content').notNull(),
+    person: text('person'),
+    /** A calendar date ("YYYY-MM-DD", user-local) the note did state, offered as a prefill. Never a time. */
+    suggestedDate: text('suggested_date'),
+    /** A repeating draft ("every Monday" without a time): only the time of day is missing. */
+    recurrenceDays: smallint('recurrence_days').array(),
+    aiFingerprint: text('ai_fingerprint').notNull(),
+    aiText: text('ai_text'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.sourceNoteId, t.userId],
+      foreignColumns: [notes.id, notes.userId],
+      name: 'reminder_drafts_source_note_owner_fk',
+    }).onDelete('cascade'),
+    unique('reminder_drafts_note_fingerprint_key').on(t.sourceNoteId, t.aiFingerprint),
+    index('reminder_drafts_user_idx').on(t.userId),
+  ],
+);
+
+/**
+ * One user's Google Calendar connection. Only a refresh token is kept, encrypted at rest (AES-256-GCM)
+ * and never sent to the browser. `needs_reconnect` means Google refused it (access revoked/expired).
+ */
+export const googleCalendarConnections = pgTable('google_calendar_connections', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  refreshTokenEnc: text('refresh_token_enc').notNull(),
+  scope: text('scope').notNull(),
+  googleEmail: text('google_email').notNull(),
+  status: text('status').notNull().default('connected'),
+  lastError: text('last_error'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
 
 /**
  * A reminder its owner explicitly shared with one other NoteFlow user. The recipient is a real user

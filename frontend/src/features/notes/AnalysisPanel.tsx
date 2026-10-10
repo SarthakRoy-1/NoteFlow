@@ -3,15 +3,20 @@ import { errorMessage, useRetryAnalysis } from './useNotes';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-export function analysisSummary({ todos, reminders }: Analysis): string {
-  if (todos === 0 && reminders === 0) {
+export function analysisSummary({ todos, reminders, pendingReminders = 0 }: Analysis): string {
+  if (todos === 0 && reminders === 0 && pendingReminders === 0) {
     return 'AI found nothing in this note to turn into a todo or reminder.';
   }
   const parts = [
     todos > 0 ? plural(todos, 'todo') : null,
     reminders > 0 ? plural(reminders, 'reminder') : null,
   ].filter(Boolean);
-  return `AI found ${parts.join(' and ')} in this note.`;
+  const found = parts.length > 0 ? `AI found ${parts.join(' and ')} in this note.` : '';
+  const pending =
+    pendingReminders > 0
+      ? `${plural(pendingReminders, 'reminder')} still ${pendingReminders === 1 ? 'needs' : 'need'} a date and time before it can be saved.`
+      : '';
+  return [found, pending].filter(Boolean).join(' ');
 }
 
 /** Shows what the AI did with this note, and lets the user retry when it could not run. */

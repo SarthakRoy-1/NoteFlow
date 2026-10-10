@@ -49,6 +49,10 @@ export function ReminderEditForm({ reminder, timezone, pending, error, onSave, o
     }
     const dueProblem = validateDue(due);
     if (dueProblem) return setProblem(dueProblem);
+    // Changing the due always needs a complete date AND time (the server enforces this too).
+    if (dueChanged(due, initial) && (!due.date || !due.time)) {
+      return setProblem('A reminder needs both a date and a time.');
+    }
     setProblem(null);
 
     const changes: ReminderChanges = {};
@@ -87,7 +91,7 @@ export function ReminderEditForm({ reminder, timezone, pending, error, onSave, o
           autoComplete="off"
         />
       </div>
-      <DueFields value={due} onChange={setDue} timezone={timezone} disabled={pending} />
+      <DueFields value={due} onChange={setDue} timezone={timezone} disabled={pending} requireTime />
       <fieldset className="repeat-fields" disabled={pending}>
         <legend>Repeat</legend>
         <div className="repeat-days">
@@ -118,10 +122,7 @@ export function ReminderEditForm({ reminder, timezone, pending, error, onSave, o
             Does not repeat
           </button>
         </div>
-        <p className="muted due-hint">
-          Repeats at the due time above ({timezone}). With no time it repeats at the start of the
-          day.
-        </p>
+        <p className="muted due-hint">Repeats at the due time above ({timezone}).</p>
       </fieldset>
       {shownError && (
         <p role="alert" className="alert alert-error">

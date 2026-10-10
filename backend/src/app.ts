@@ -6,6 +6,9 @@ import { passwordAuthRouter, type PasswordAuthLimiters } from './auth/password.r
 import { authRouter } from './auth/routes.js';
 import { createAIProvider, type AIProvider } from './ai/provider/index.js';
 import { createGoogleAuth, type GoogleAuth } from './auth/google.js';
+import { calendarRouter } from './calendar/calendar.routes.js';
+import { CalendarSync } from './calendar/calendarSync.js';
+import { createGoogleCalendarApi, type GoogleCalendarApi } from './calendar/googleCalendar.js';
 import type { Env } from './config/env.js';
 import { AppError, notFound } from './lib/errors.js';
 import { createEmailSender, type EmailSender } from './email/index.js';
@@ -21,6 +24,7 @@ import { originCheck } from './middleware/originCheck.js';
 import { currentUser, requireAuth } from './middleware/requireAuth.js';
 import { askRouter } from './modules/ask/ask.routes.js';
 import { notesRouter } from './modules/notes/notes.routes.js';
+import { reminderDraftsRouter } from './modules/reminders/drafts.routes.js';
 import { remindersRouter } from './modules/reminders/reminders.routes.js';
 import { sharedRemindersRouter } from './modules/shares/shares.routes.js';
 import { todosRouter } from './modules/todos/todos.routes.js';
@@ -78,6 +82,8 @@ export interface AppDeps {
   email?: EmailSender;
   /** Override the Web Push sender (tests). Defaults to VAPID from the environment, else "not configured". */
   push?: PushSender;
+  /** Override the Google Calendar API client (tests). Defaults to the real one when Google OAuth is configured. */
+  calendarApi?: GoogleCalendarApi | null;
   /** Override the password sign-in/registration limiters (tests). */
   authLimiters?: PasswordAuthLimiters;
 }
@@ -93,6 +99,7 @@ export function createApp({
   authLimiters,
   email,
   push,
+  calendarApi,
 }: AppDeps) {
   const app = express();
   app.disable('x-powered-by');
@@ -110,6 +117,18 @@ export function createApp({
   // Reminder notifications need a sender whether or not password sign-up is enabled.
   const emailSender = email ?? createEmailSender(env);
   const pushSender = push ?? createPushSender(env);
+
+  // Google Calendar needs the same OAuth client as sign-in; without credentials it is unavailable.
+  const calendarClient =
+    calendarApi !== undefined
+      ? calendarApi
+      : env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+        ? createGoogleCalendarApi({
+            clientId: env.GOOGLE_CLIENT_ID,
+            clientSecret: env.GOOGLE_CLIENT_SECRET,
+          })
+        : null;
+  const calendarSync = new CalendarSync(db, calendarClient, env.SESSION_SECRET);
 
   // Created on first use so missing Google config is a controlled per-request error.
   let google: GoogleAuth | undefined;
@@ -193,13 +212,22 @@ export function createApp({
     windowMs: 60_000,
     now: clock,
   });
-  protectedApi.use('/notes', notesRouter({ db, ai: provider, now: clock, limiter }));
+  protectedApi.use('/calendar', calendarRouter({ env, getGoogle, sync: calendarSync, now: clock }));
+  protectedApi.use(
+    '/notes',
+    notesRouter({ db, ai: provider, now: clock, limiter, sync: calendarSync }),
+  );
+  protectedApi.use(
+    '/reminder-drafts',
+    reminderDraftsRouter({ db, now: clock, sync: calendarSync }),
+  );
   protectedApi.use('/todos', todosRouter(db));
   protectedApi.use(
     '/reminders',
     remindersRouter({
       db,
       now: clock,
+      sync: calendarSync,
       shareLimiter: createRateLimiter({
         limit: SHARE_ATTEMPTS_PER_MINUTE,
         windowMs: 60_000,

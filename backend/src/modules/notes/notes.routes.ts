@@ -81,8 +81,13 @@ export function notesRouter(deps: AnalysisDeps) {
   });
 
   router.delete('/:id', async (req, res) => {
-    const deleted = await repo.deleteNote(db, currentUser(req).id, parseNoteId(req.params.id));
+    const userId = currentUser(req).id;
+    const id = parseNoteId(req.params.id);
+    // Deleting the note deletes its reminders, so their calendar events are collected first.
+    const eventIds = (await deps.sync?.eventIdsForNote(userId, id)) ?? [];
+    const deleted = await repo.deleteNote(db, userId, id);
     if (!deleted) throw notFound(NOT_FOUND_MESSAGE);
+    await deps.sync?.removeEvents(userId, eventIds);
     res.status(204).end();
   });
 

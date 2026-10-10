@@ -71,10 +71,17 @@ describe('Asia/Kolkata (the development account’s zone)', () => {
     expect(again.body.todo.dueAt).toBe('2026-10-09T11:30:00.000Z');
   });
 
-  it('a date-only reminder starts at local midnight and has no time', async () => {
+  it('a reminder cannot be given a date without a time (nothing is invented)', async () => {
     const w = await world(KOLKATA);
     const r = await w.patchReminder({ due: { date: '2026-10-09' } });
-    expect(r.body.reminder).toMatchObject({ dueAt: '2026-10-08T18:30:00.000Z', dueHasTime: false });
+    expect(r.status).toBe(422);
+    expect(r.body.error.message).toMatch(/needs a time/i);
+  });
+
+  it('a reminder at local midnight is stored as midnight, with a time', async () => {
+    const w = await world(KOLKATA);
+    const r = await w.patchReminder({ due: { date: '2026-10-09', time: '00:00' } });
+    expect(r.body.reminder).toMatchObject({ dueAt: '2026-10-08T18:30:00.000Z', dueHasTime: true });
   });
 
   it('a date-only todo is due by the end of the local day and has no time', async () => {
@@ -118,11 +125,11 @@ describe('daylight saving through the API (America/New_York)', () => {
     expect(await at('02:00')).toBe('2026-11-01T07:00:00.000Z'); // EST
   });
 
-  it('date-only values follow the real length of the day', async () => {
+  it('midnight and date-only values follow the real length of the day', async () => {
     const w = await world(NY);
-    const spring = await w.patchReminder({ due: { date: '2026-03-08' } });
+    const spring = await w.patchReminder({ due: { date: '2026-03-08', time: '00:00' } });
     expect(spring.body.reminder.dueAt).toBe('2026-03-08T05:00:00.000Z');
-    const fall = await w.patchReminder({ due: { date: '2026-11-01' } });
+    const fall = await w.patchReminder({ due: { date: '2026-11-01', time: '00:00' } });
     expect(fall.body.reminder.dueAt).toBe('2026-11-01T04:00:00.000Z');
     const todoSpring = await w.patchTodo({ due: { date: '2026-03-08' } });
     expect(todoSpring.body.todo.dueAt).toBe('2026-03-09T03:59:59.999Z');
@@ -153,17 +160,17 @@ describe('reminder alerts at the exact instant, across a DST change', () => {
     expect(at.body.nextDueAt).toBeNull();
   });
 
-  it('a date-only reminder alerts from local midnight, with no invented hour', async () => {
+  it('a midnight reminder alerts at local midnight, across the fall-back day', async () => {
     const clock = { at: Date.parse('2026-11-01T03:59:59.999Z') }; // one ms before midnight EDT
     const w = await world(NY, clock);
-    await w.patchReminder({ due: { date: '2026-11-01' } });
+    await w.patchReminder({ due: { date: '2026-11-01', time: '00:00' } });
     expect((await w.getDue()).body.reminders).toEqual([]);
 
     clock.at = Date.parse('2026-11-01T04:00:00.000Z');
     const due = await w.getDue();
     expect(due.body.reminders[0]).toMatchObject({
       dueAt: '2026-11-01T04:00:00.000Z',
-      dueHasTime: false,
+      dueHasTime: true,
     });
   });
 

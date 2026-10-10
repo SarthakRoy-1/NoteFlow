@@ -260,7 +260,7 @@ describe('editing the schedule', () => {
     expect(after).toMatchObject({ recurrenceDays: null, recurrenceTime: null });
   });
 
-  it('turning repeat on for a reminder with no time repeats at the start of the day', async () => {
+  it('refuses to make a reminder with no time repeat (a reminder needs a time)', async () => {
     const ctx = setup();
     const u = await createUserWithSession(db, { timezone: KOLKATA });
     const [n] = await db
@@ -275,12 +275,10 @@ describe('editing the schedule', () => {
       .patch(`/api/reminders/${r?.id}`)
       .set('Cookie', u.cookie)
       .send({ recurrence: { days: [1, 2, 3, 4, 5, 6, 7] } });
-    expect(res.status).toBe(200);
-    expect(res.body.reminder).toMatchObject({
-      recurrence: { days: [1, 2, 3, 4, 5, 6, 7], time: null },
-      dueHasTime: false,
-      dueAt: '2026-10-08T18:30:00.000Z', // Friday 00:00 IST
-    });
+    expect(res.status).toBe(422);
+    expect(res.body.error.message).toMatch(/date and time/i);
+    const [row] = await db.select().from(reminders);
+    expect(row?.recurrenceDays).toBeNull();
   });
 
   it.each([

@@ -33,9 +33,11 @@ interface Props {
   onChange: (next: DueState) => void;
   timezone: string;
   disabled?: boolean;
+  /** Reminders need a time of day as well as a date (todos may be date-only). */
+  requireTime?: boolean;
 }
 
-export function DueFields({ value, onChange, timezone, disabled }: Props) {
+export function DueFields({ value, onChange, timezone, disabled, requireTime }: Props) {
   const dateId = useId();
   const timeId = useId();
   return (
@@ -55,7 +57,7 @@ export function DueFields({ value, onChange, timezone, disabled }: Props) {
           />
         </div>
         <div className="field">
-          <label htmlFor={timeId}>Due time (optional)</label>
+          <label htmlFor={timeId}>{requireTime ? 'Due time' : 'Due time (optional)'}</label>
           <input
             id={timeId}
             type="time"
@@ -66,7 +68,10 @@ export function DueFields({ value, onChange, timezone, disabled }: Props) {
         </div>
       </div>
       <p className="muted due-hint">
-        Times are in your timezone ({timezone}). Clear the date to remove the due date.
+        Times are in your timezone ({timezone}).
+        {requireTime
+          ? ' A reminder needs both a date and a time.'
+          : ' Clear the date to remove the due date.'}
       </p>
     </>
   );

@@ -6,6 +6,8 @@ import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { VerifyEmailPage } from '../features/auth/VerifyEmailPage';
 import { PasswordAuthOnly } from '../features/auth/PasswordAuthOnly';
 import { RequireAuth } from '../features/auth/RequireAuth';
+import { PrivacyPage } from '../features/legal/PrivacyPage';
+import { TermsPage } from '../features/legal/TermsPage';
 import { NewNote } from '../features/notes/NewNote';
 import { NoteDetailRoute } from '../features/notes/NoteDetail';
 import { NoNoteSelected, NotesPage } from '../features/notes/NotesPage';
@@ -18,6 +20,9 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Public: readable without signing in, and by direct link (Google's branding review). */}
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
       <Route
         path="/verify-email"
         element={

@@ -10,7 +10,19 @@ import type {
   PushTarget,
 } from '../../src/notifications/push.js';
 import type { AIProvider } from '../../src/ai/provider/index.js';
-import type { GoogleAuth, GoogleIdentity, OAuthChecks } from '../../src/auth/google.js';
+import type {
+  CalendarGrant,
+  GoogleAuth,
+  GoogleIdentity,
+  OAuthChecks,
+} from '../../src/auth/google.js';
+import type {
+  CalendarEventInput,
+  CalendarFailure,
+  DeleteOutcome,
+  GoogleCalendarApi,
+  UpsertOutcome,
+} from '../../src/calendar/googleCalendar.js';
 import { hashPassword } from '../../src/auth/password.js';
 import { createSession, hashToken } from '../../src/auth/sessions.js';
 import { SESSION_COOKIE } from '../../src/auth/cookies.js';
@@ -135,6 +147,68 @@ export class FakeGoogle implements GoogleAuth {
     if (this.failWith) throw this.failWith;
     return this.identity;
   }
+
+  // ---- Google Calendar consent
+  calendarStarted: OAuthChecks[] = [];
+  calendarCompleted: { url: URL; checks: OAuthChecks }[] = [];
+  /** What the next calendar consent returns. */
+  calendarGrant: CalendarGrant = {
+    email: 'person@example.com',
+    emailVerified: true,
+    refreshToken: 'refresh-token-1',
+    scope: 'openid email https://www.googleapis.com/auth/calendar.events.owned',
+  };
+  calendarFailWith: Error | undefined;
+
+  async startCalendarAuthorization() {
+    const checks: OAuthChecks = {
+      state: `cal-state-${this.calendarStarted.length}-${Math.random().toString(36).slice(2)}`,
+      codeVerifier: `cal-verifier-${Math.random().toString(36).slice(2)}`,
+      nonce: `cal-nonce-${Math.random().toString(36).slice(2)}`,
+    };
+    this.calendarStarted.push(checks);
+    const url = new URL('https://accounts.example.test/calendar-consent');
+    url.searchParams.set('state', checks.state);
+    return { url, checks };
+  }
+
+  async completeCalendarAuthorization(url: URL, checks: OAuthChecks) {
+    this.calendarCompleted.push({ url, checks });
+    if (this.calendarFailWith) throw this.calendarFailWith;
+    return this.calendarGrant;
+  }
+}
+
+/** Records Google Calendar calls instead of contacting Google. Outcomes can be scripted. */
+export class FakeCalendarApi implements GoogleCalendarApi {
+  upserts: CalendarEventInput[] = [];
+  deletes: string[] = [];
+  revoked: string[] = [];
+  /** Event ids "present" in the fake calendar, so an update vs a create can be told apart. */
+  events = new Map<string, CalendarEventInput>();
+  failWith: CalendarFailure | undefined;
+  failDeleteWith: CalendarFailure | undefined;
+  /** Fail only the events whose summary is in this set (a partial outage). */
+  failSummaries = new Set<string>();
+
+  async upsertEvent(_token: string, event: CalendarEventInput): Promise<UpsertOutcome> {
+    this.upserts.push(event);
+    if (this.failWith) return { ok: false, failure: this.failWith };
+    if (this.failSummaries.has(event.summary)) return { ok: false, failure: 'transient' };
+    this.events.set(event.eventId, event);
+    return { ok: true, eventId: event.eventId };
+  }
+
+  async deleteEvent(_token: string, eventId: string): Promise<DeleteOutcome> {
+    this.deletes.push(eventId);
+    if (this.failDeleteWith) return { ok: false, failure: this.failDeleteWith };
+    this.events.delete(eventId);
+    return { ok: true };
+  }
+
+  async revoke(token: string) {
+    this.revoked.push(token);
+  }
 }
 
 /** Effectively unlimited, so ordinary tests never trip the sign-in limits (rate-limit tests pass their own). */
@@ -216,6 +290,7 @@ export function buildApp(
     authLimiters?: PasswordAuthLimiters;
     email?: EmailSender;
     push?: PushSender;
+    calendarApi?: GoogleCalendarApi | null;
   } = {},
 ) {
   return createApp({
@@ -230,5 +305,7 @@ export function buildApp(
     authLimiters: extra.authLimiters ?? generousAuthLimiters(),
     email: extra.email ?? new FakeEmail(),
     push: extra.push ?? new FakePush(),
+    // Never the real Google client in tests: no real calendar can be touched.
+    calendarApi: extra.calendarApi ?? null,
   });
 }

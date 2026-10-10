@@ -437,3 +437,39 @@ Optional bonus work should only begin after all mandatory core and "Should have"
 - **Email + Web Push.** Migration `0006_notifications` (additive): `notification_preferences`, `push_subscriptions`, `notification_deliveries` (unique per reminder/recipient/channel/occurrence). Code in `backend/src/notifications/` (`dispatcher.ts`, `push.ts`, `messages.ts`, `notifications.routes.ts`, `scheduler.ts`); API under `/api/notifications` plus the secret-guarded `POST /api/internal/notifications/dispatch`; frontend `features/notifications/` and `public/sw.js`.
 - **Gotchas found while verifying:** `import * as webpush from 'web-push'` works under vitest but its functions are missing under real Node ESM; use the default import. A push probe with an invalid P-256 key fails inside the library before any network call; use a real generated key pair.
 - **Not verified:** a real Resend delivery (no sending domain / key in this environment), a real browser push delivery (the push service accepted nothing but a deliberately bogus subscription, answering 410), and anything on Render until the variables and the external scheduler are set.
+
+## Calendar, pending reminders and Settings close (10 Oct 2026)
+
+- **A reminder needs a valid date AND time to exist.** `lib/reminderCompleteness.ts#isCompleteReminder`
+  decides. Reconciliation (`reconcile/reconcile.ts`) stores incomplete AI reminders in
+  `reminder_drafts` (migration 0007, additive) instead of `reminders`; drafts are keyed by
+  (note, fingerprint), removed when the note stops producing them, tombstoned (`ai_dismissed`) when
+  dismissed. `POST /api/reminder-drafts/:id/complete` is the only way a draft becomes a reminder and
+  it requires a time (and a future date, unless the draft repeats). `PATCH /api/reminders/:id`
+  rejects `due: null`, a date without a time, and repeat on a reminder with no time.
+- **Google Calendar** (`backend/src/calendar/`): consent is a separate, explicit flow
+  (`POST /api/calendar/connect`, signed `noteflow_calendar` cookie bound to the user, handled in the
+  existing `/api/auth/google/callback`). Refresh token encrypted at rest. `CalendarSync` never throws;
+  event id = reminder id without dashes (idempotent create). `reminders.calendar_synced_at = NULL`
+  marks an event stale; `google_event_id` links the event. Tests mock Google (`FakeCalendarApi`).
+- **Settings** has a close button (returns to the previous in-app page or Notes) and asks before
+  discarding an unsaved time zone change.
+
+## Release preparation (11 Oct 2026)
+
+- **Sync existing reminders.** `POST /api/calendar/sync` (`CalendarSync.syncAll`) sends up to 25 of
+  the signed-in user's stale reminders per call (pending, real date AND time, upcoming or repeating,
+  `google_event_id` or `calendar_synced_at` missing); returns `{ result, synced, failed, remaining }`.
+  Idempotent through the deterministic event id. Changing the time zone nulls `calendar_synced_at`
+  for reminders that already have an event, so the next sync re-sends them in the new zone.
+- **Privacy/Terms** corrected (backfill is explicit, calendar deletion is best effort, hosting
+  region confirmed as Render Oregon, narrower-scope claim reworded); `LEGAL_LAST_UPDATED` is
+  11 October 2026; contact is the owner's email in `legalInfo.ts`.
+- **Docker** verified from a clean example config (build, 8 migrations, `/privacy`, `/terms`,
+  `/api/health`); `docker-compose.yml` now passes the optional email, VAPID, notification and model
+  variables through.
+- **README** rewritten as a full project guide with real screenshots under `docs/screenshots/`.
+- **Remaining:** screenshots of signed-in pages (Notes, note editor/AI analysis, Todos, Reminders,
+  pending reminders, Ask AI, Settings, Calendar connected/disconnected) need a signed-in browser
+  session; a real Google Calendar consent and event lifecycle has not been run; nothing from this
+  release is deployed yet.

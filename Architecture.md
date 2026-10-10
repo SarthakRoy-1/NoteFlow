@@ -650,3 +650,14 @@ Potential improvements:
 - background reminder scheduling
 
 Do not introduce infrastructure solely because it might be useful at larger scale.
+
+## Google Calendar and pending reminders (10 Oct 2026)
+
+- `reminder_drafts`: AI reminders without a valid date and time. Not reminders: never alert, never
+  synced. Completing one (explicit user input, validated by the server in the user's zone) inserts a
+  reminder and deletes the draft in one transaction.
+- `google_calendar_connections`: per-user encrypted refresh token and status (`connected` |
+  `needs_reconnect`). `reminders.google_event_id` / `calendar_synced_at` link and stale-mark events.
+- `CalendarSync` (backend/src/calendar/calendarSync.ts) is called after commit by the reminder
+  routes, draft completion and note analysis; it is a no-op without a connection and never fails the
+  caller. `GoogleCalendarApi` (googleCalendar.ts) is the only code that talks to Google.

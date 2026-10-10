@@ -2169,3 +2169,247 @@ select {
   margin: 0;
   accent-color: var(--accent, currentColor);
 }
+
+/* Settings close button */
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  color: var(--ink);
+  background: var(--paper-sunk);
+}
+
+.icon-button:focus-visible {
+  outline: 2px solid var(--pen);
+  outline-offset: 2px;
+}
+
+.unsaved-close {
+  margin-bottom: 16px;
+}
+
+/* Reminders that still need a date and time */
+.pending-reminders {
+  margin-bottom: 24px;
+}
+
+.draft-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.draft-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.draft-text {
+  font-weight: 600;
+}
+
+.draft-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.draft-form .field {
+  margin: 0;
+}
+
+.draft-form input[type='date'],
+.draft-form input[type='time'] {
+  width: auto;
+}
+
+/* Legal pages (Privacy Policy, Terms of Service): public, single readable column */
+.legal-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.legal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 20px 20px 0;
+}
+
+.legal-header .back-link {
+  /* .back-link is mobile-only elsewhere (note detail); on a public page it is always needed. */
+  display: inline-flex;
+  margin-bottom: 0;
+}
+
+.legal-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.legal-main {
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 24px 20px 40px;
+  flex: 1;
+}
+
+.legal-main h1 {
+  margin: 8px 0 4px;
+}
+
+.legal-meta {
+  margin: 0 0 16px;
+  color: var(--ink-3);
+  font-size: 0.875rem;
+}
+
+.legal-intro {
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
+.legal-toc {
+  margin: 20px 0 8px;
+  padding: 14px 18px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+
+.legal-toc ol {
+  margin: 0;
+  padding-left: 1.2em;
+  columns: 2;
+  column-gap: 32px;
+  font-size: 0.9375rem;
+}
+
+.legal-section {
+  margin-top: 32px;
+  scroll-margin-top: 16px;
+}
+
+.legal-section h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+}
+
+.legal-section p,
+.legal-section li {
+  line-height: 1.65;
+}
+
+.legal-section ul {
+  padding-left: 1.2em;
+}
+
+.legal-section li + li {
+  margin-top: 6px;
+}
+
+.legal-section code {
+  overflow-wrap: anywhere;
+  font-size: 0.875em;
+}
+
+.legal-section a,
+.legal-main a {
+  overflow-wrap: anywhere;
+}
+
+.legal-footer,
+.login-legal + .legal-links,
+.settings-legal {
+  display: flex;
+  justify-content: center;
+}
+
+.legal-footer {
+  padding: 16px 20px 28px;
+  border-top: 1px solid var(--rule);
+}
+
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 10px;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+
+.legal-links a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+
+.legal-links a:hover {
+  color: var(--ink);
+}
+
+.legal-links a:focus-visible,
+.login-legal a:focus-visible {
+  outline: 2px solid var(--pen);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.login-legal {
+  margin: 20px 0 8px;
+  font-size: 0.8125rem;
+}
+
+.login-legal + .legal-links {
+  justify-content: flex-start;
+}
+
+.settings-legal {
+  padding: 24px 0 8px;
+}
+
+@media (max-width: 600px) {
+  .legal-toc ol {
+    columns: 1;
+  }
+
+  .legal-header,
+  .legal-main {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

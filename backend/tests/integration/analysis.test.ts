@@ -3,7 +3,7 @@ import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { AIProviderError } from '../../src/ai/provider/index.js';
 import { createApp } from '../../src/app.js';
-import { aiDismissed, notes, reminders, todos } from '../../src/db/schema.js';
+import { aiDismissed, notes, reminders, todos, reminderDrafts } from '../../src/db/schema.js';
 import { applyNoteEdit } from '../../src/modules/notes/notes.repo.js';
 import { FakeAI, item, reply } from '../helpers/fakeAi.js';
 import {
@@ -63,7 +63,13 @@ describe('saving a note runs extraction', () => {
     const res = await post(app, u.cookie, { title: 'Groceries', content: 'buy milk tomorrow' });
 
     expect(res.status).toBe(201);
-    expect(res.body.note.analysis).toEqual({ status: 'ok', error: null, todos: 1, reminders: 0 });
+    expect(res.body.note.analysis).toEqual({
+      status: 'ok',
+      error: null,
+      todos: 1,
+      reminders: 0,
+      pendingReminders: 0,
+    });
     const [t] = await allTodos(db);
     expect(t).toMatchObject({
       userId: u.user.id,
@@ -104,7 +110,7 @@ describe('saving a note runs extraction', () => {
     expect(await allTodos(db)).toHaveLength(0);
   });
 
-  it('stores a date-only reminder at the start of the local day, flagged as no time', async () => {
+  it('keeps a date-only reminder as a pending reminder: no time is invented', async () => {
     const { app, ai } = setup();
     ai.respondWith(
       reply(
@@ -120,20 +126,22 @@ describe('saving a note runs extraction', () => {
     );
     const u = await createUserWithSession(db, { timezone: 'Asia/Tokyo' });
     await post(app, u.cookie, { title: 'Visa', content: 'remind me to renew the visa tomorrow' });
-    const [r] = await allReminders(db);
-    expect(r?.dueHasTime).toBe(false);
-    expect(r?.dueAt?.toISOString()).toBe('2026-10-08T15:00:00.000Z'); // 00:00 JST on 9 Oct
+    // Not a reminder yet: it has a date but no time of day.
+    expect(await allReminders(db)).toHaveLength(0);
+    const rows = await db.select().from(reminderDrafts);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.suggestedDate).toBe('2026-10-09'); // the date the note stated, in Tokyo
   });
 
-  it('a reminder without any time keeps due_at NULL', async () => {
+  it('a reminder without any date or time is pending, never stored with an empty due', async () => {
     const { app, ai } = setup();
     ai.respondWith(
       reply(item({ kind: 'reminder', text: 'Call mum', evidence: 'remind me to call mum' })),
     );
     const u = await createUserWithSession(db);
     await post(app, u.cookie, { title: 'Mum', content: 'remind me to call mum' });
-    const [r] = await allReminders(db);
-    expect(r?.dueAt).toBeNull();
+    expect(await allReminders(db)).toHaveLength(0);
+    expect(await db.select().from(reminderDrafts)).toHaveLength(1);
   });
 
   it('informational notes create nothing but still count as analysed', async () => {
@@ -143,7 +151,13 @@ describe('saving a note runs extraction', () => {
       title: 'Meeting',
       content: 'Project meeting went well today.',
     });
-    expect(res.body.note.analysis).toEqual({ status: 'ok', error: null, todos: 0, reminders: 0 });
+    expect(res.body.note.analysis).toEqual({
+      status: 'ok',
+      error: null,
+      todos: 0,
+      reminders: 0,
+      pendingReminders: 0,
+    });
     expect(await allTodos(db)).toHaveLength(0);
     expect(await allReminders(db)).toHaveLength(0);
   });

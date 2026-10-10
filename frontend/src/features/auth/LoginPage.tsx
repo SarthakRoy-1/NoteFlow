@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { GoogleG, Mark } from '../../components/icons';
 import { EmailAuthForm } from './EmailAuthForm';
 import type { AuthMode } from './emailAuth';
+import { LegalLinks } from '../legal/LegalLinks';
 import { loginErrorMessage } from './loginErrors';
 import { useAuthConfig, useMe } from './useAuth';
 
@@ -101,6 +102,11 @@ export function LoginPage() {
             </>
           )}
         </div>
+        <p className="login-legal muted">
+          By signing in you agree to the <Link to="/terms">Terms of Service</Link> and acknowledge
+          the <Link to="/privacy">Privacy Policy</Link>.
+        </p>
+        <LegalLinks />
       </div>
 
       {/* A worked example of the mechanism, not account data. Hidden from assistive tech: the copy beside it says the same. */}

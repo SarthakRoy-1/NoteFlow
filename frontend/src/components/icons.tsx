@@ -60,6 +60,12 @@ export const SettingsIcon = () => (
   </Icon>
 );
 
+export const CloseIcon = () => (
+  <Icon>
+    <path d="M5 5l10 10M15 5L5 15" />
+  </Icon>
+);
+
 export const PlusIcon = () => (
   <Icon>
     <path d="M10 4.5v11M4.5 10h11" />
