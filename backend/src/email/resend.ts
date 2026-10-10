@@ -21,7 +21,12 @@ export class ResendEmailSender implements EmailSender {
     try {
       res = await this.fetchImpl(ENDPOINT, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          // Resend drops a repeat of the same key for 24 h, so a retry after a timeout cannot double-send.
+          ...(message.idempotencyKey ? { 'Idempotency-Key': message.idempotencyKey } : {}),
+        },
         body: JSON.stringify({
           from: this.from,
           to: [message.to],

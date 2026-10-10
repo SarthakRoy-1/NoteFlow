@@ -19,6 +19,7 @@ export function LoginPage() {
   const me = useMe();
   const config = useAuthConfig();
   const [mode, setMode] = useState<AuthMode>('signin');
+  const [remember, setRemember] = useState(false);
   const passwordAuth = config.data?.passwordAuthEnabled === true;
   // Wait for the config so the message never flashes the wrong wording.
   const error = config.isPending ? null : loginErrorMessage(params.get('error'), passwordAuth);
@@ -26,7 +27,7 @@ export function LoginPage() {
   if (me.data) return <Navigate to="/" replace />;
 
   // Plain link on purpose: sign-in is a full-page redirect to Google, not an XHR call.
-  const signInHref = `/api/auth/google?tz=${encodeURIComponent(browserTimezone())}`;
+  const signInHref = `/api/auth/google?tz=${encodeURIComponent(browserTimezone())}${remember ? '&remember=1' : ''}`;
 
   return (
     <main className="login">
@@ -76,6 +77,19 @@ export function LoginPage() {
             <GoogleG />
             {mode === 'register' ? 'Sign up with Google' : 'Sign in with Google'}
           </a>
+          <label className="remember-me">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
+            <span>Remember me on this device</span>
+          </label>
+          <p className="muted remember-hint">
+            {remember
+              ? 'You will stay signed in here for a while, even after closing the browser.'
+              : 'Otherwise you are signed out when you close the browser.'}
+          </p>
 
           {passwordAuth && (
             <>

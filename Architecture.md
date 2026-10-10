@@ -239,6 +239,17 @@ Unique per (reminder, recipient); a user cannot share with themselves; deleting 
 account deletes the share. The recipient reads it only through `GET /api/shared-reminders`, which returns
 the reminder's text, time and repeat rule and the sender's name, never the source note.
 
+## NotificationPreference, PushSubscription, NotificationDelivery
+
+- `notification_preferences` (user_id primary key): email_enabled (default true), push_enabled (default
+  true; a device is only used once subscribed), push_show_text (default false). No row = defaults.
+- `push_subscriptions`: user_id, endpoint (unique; a capability URL, never logged or returned), p256dh,
+  auth, label, last_success_at. Up to 10 per user; a browser profile belongs to whoever subscribed last.
+- `notification_deliveries`: the durable ledger. One row per (reminder_id, recipient_id, channel,
+  occurrence_at) under a unique constraint, with status (`pending`, `sending`, `sent`, `failed`,
+  `skipped`), attempts, next_attempt_at, claimed_at and a short last_error code. Deleting the reminder
+  deletes its rows.
+
 ## AskHistory
 
 - id
@@ -493,6 +504,11 @@ The backend:
 
 OAuth credentials and session secrets remain server-side.
 
+**Sessions and "Remember me".** The choice is made on the sign-in page and stored in the signed OAuth
+cookie when sign-in starts, so only the server-signed value is ever trusted. Remembered: a dated
+cookie and a server session of `REMEMBER_ME_TTL_DAYS` (30). Not remembered: a browser-session cookie
+and a server session of `SESSION_ONLY_TTL_HOURS` (24). The server session row is the authority: it is
+checked for expiry on every request, and logout deletes it, so a copied cookie stops working.
 ---
 
 # 5. Scalability and Future Considerations
@@ -561,18 +577,37 @@ The optional smarter Ask AI ranking feature should only be added after the core 
 
 ## Reminder Infrastructure
 
-The assignment only requires in-app alerts.
+The assignment only requires in-app alerts (the browser polls `/api/reminders/due`). Email and Web Push
+were added on top, as delivery that does not need the app open:
 
-Future production scale could use:
+```text
+trigger (in-process poller | POST /api/internal/notifications/dispatch, Bearer secret)
+        -> runDispatch(now)                       notifications/dispatcher.ts
+           1. enqueue   due occurrences -> INSERT ... ON CONFLICT DO NOTHING into notification_deliveries
+           2. claim     SELECT ... FOR UPDATE SKIP LOCKED, status -> sending
+           3. re-check  reminder still pending/unmoved, share still valid, preference still on, not stale
+           4. send      EmailSender (Resend, Idempotency-Key = delivery id) | PushSender (web-push, VAPID)
+           5. record    sent | skipped(reason) | failed | retry with backoff
+```
 
-- scheduled workers
-- queues
-- notification service
-- WebSockets
-- push notifications
+- **Idempotency** comes from the ledger's unique key, not from process memory: repeated ticks, two
+  instances and restarts collapse into the same row. A crashed worker's claim goes stale after 5 minutes
+  and is taken over; the email provider's idempotency key covers the narrow send-then-crash window, and
+  Web Push uses the delivery id as the message topic.
+- **Occurrences.** A one-off reminder's occurrence is its `due_at`; a repeating reminder's is its latest
+  rule occurrence in the owner's timezone, not before it was created and not one already acknowledged.
+  Recipients of a share are only notified for occurrences from after it was shared and not yet
+  acknowledged by them. Anything older than 3 hours is recorded as `skipped: stale`.
+- **Failure handling.** A provider "rejected" (4xx, e.g. an invalid address) is permanent; "unavailable"
+  (timeout, 429, 5xx) retries after 1, 5, 15 and 60 minutes, five attempts in all. A push service that
+  answers 404/410 removes that subscription.
+- **Privacy.** Pushes carry no reminder text unless the user opted in; only status codes are stored or
+  logged. Push endpoints must be on a known push service (SSRF guard).
+- **Hosting.** Render's free instance sleeps, so the in-process poller is only a backstop: an external
+  scheduler calls the dispatch endpoint (secret in `NOTIFICATIONS_CRON_SECRET`).
 
-Email and push notifications are not required by the assignment.
-
+Still future work: queues for volume, WebSockets for instant in-app delivery, per-device (rather than
+per-user) push delivery tracking, and a "next notify at" column so the enqueue scan is indexed.
 ---
 
 ## Observability

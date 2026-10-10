@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { readTheme, saveTheme, type ThemeChoice } from '../../lib/theme';
 import { useAuthConfig, useMe, useUpdateTimezone } from '../auth/useAuth';
+import { NotificationSettings } from '../notifications/NotificationSettings';
 import { errorMessage } from '../notes/useNotes';
 import { SignInMethods } from './SignInMethods';
 
@@ -134,6 +135,8 @@ export function SettingsPage() {
           )}
         </div>
       </form>
+
+      <NotificationSettings />
 
       <div className="settings-row">
         <div className="settings-label">

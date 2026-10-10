@@ -275,8 +275,16 @@ Only implement after P0 and P1 are stable.
 - Smarter Ask AI relevance ranking. (implemented: PostgreSQL full-text ranking)
 - Docker setup. (implemented: `docker compose up --build`)
 
-Bonus features must never destabilize core functionality.
+Added after the bonus list, at the owner's request:
 
+- Email notifications for due reminders (owner and shared recipients), with per-user preferences.
+  (implemented; needs a verified sending domain in Resend to reach users other than the account owner)
+- Web Push notifications with an explicit permission flow, multiple devices and privacy-preserving
+  content by default. (implemented; needs VAPID keys and an external scheduler on a sleeping host)
+- "Remember me" on Google sign-in: a 30-day persistent session versus a browser-session cookie.
+  (implemented)
+
+Bonus features must never destabilize core functionality.
 ---
 
 # 6. Success Metrics

@@ -27,6 +27,14 @@ export const reminderStatus = pgEnum('reminder_status', ['pending', 'acknowledge
 export const itemKind = pgEnum('item_kind', ['todo', 'reminder']);
 export const askStatus = pgEnum('ask_status', ['answered', 'no_info', 'failed']);
 export const userTokenPurpose = pgEnum('user_token_purpose', ['verify_email', 'reset_password']);
+export const deliveryChannel = pgEnum('delivery_channel', ['email', 'push']);
+export const deliveryStatus = pgEnum('delivery_status', [
+  'pending',
+  'sending',
+  'sent',
+  'failed',
+  'skipped',
+]);
 
 /**
  * An account signs in with Google (`google_sub`), a password (`password_hash`, Argon2id PHC string),
@@ -337,4 +345,82 @@ export const askHistorySources = pgTable(
     rank: integer('rank').notNull(),
   },
   (t) => [primaryKey({ columns: [t.askId, t.rank] })],
+);
+
+/** Per-user notification choices. A missing row means the defaults below, so nothing is backfilled. */
+export const notificationPreferences = pgTable('notification_preferences', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  emailEnabled: boolean('email_enabled').notNull().default(true),
+  /** Pauses push without forgetting the user's devices. A device is only used once subscribed. */
+  pushEnabled: boolean('push_enabled').notNull().default(true),
+  /** Off by default: a lock screen or a shared screen should not show private reminder text. */
+  pushShowText: boolean('push_show_text').notNull().default(false),
+  updatedAt: updatedAt(),
+});
+
+/**
+ * One browser/device a user allowed notifications on. `endpoint` is a capability URL (anyone who
+ * holds it can push to that browser), so it is never logged or returned. It is unique: a browser
+ * profile belongs to whoever subscribed it last.
+ */
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    /** A short human label such as "Chrome on Windows". */
+    label: text('label').notNull().default('Browser'),
+    createdAt: createdAt(),
+    lastSuccessAt: timestamptz('last_success_at'),
+  },
+  (t) => [index('push_subscriptions_user_idx').on(t.userId)],
+);
+
+/**
+ * The durable ledger of notifications: one row per (reminder, person, channel, occurrence). The
+ * unique key is what makes sending idempotent: a repeated scheduler run, a second instance or a
+ * restart can enqueue the same occurrence again and it collapses into the existing row. Deleting
+ * the reminder deletes its rows, so a deleted reminder can never be sent afterwards.
+ */
+export const notificationDeliveries = pgTable(
+  'notification_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reminderId: uuid('reminder_id')
+      .notNull()
+      .references(() => reminders.id, { onDelete: 'cascade' }),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    channel: deliveryChannel('channel').notNull(),
+    /** The reminder instant this delivery is for. A repeating reminder has one row per occurrence. */
+    occurrenceAt: timestamptz('occurrence_at').notNull(),
+    status: deliveryStatus('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamptz('next_attempt_at').notNull().defaultNow(),
+    /** Set while a worker holds the row; a stale claim (crashed worker) can be taken over. */
+    claimedAt: timestamptz('claimed_at'),
+    sentAt: timestamptz('sent_at'),
+    /** A short machine code ("rejected", "unavailable", ...), never provider text or reminder content. */
+    lastError: text('last_error'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique('notification_deliveries_occurrence_key').on(
+      t.reminderId,
+      t.recipientId,
+      t.channel,
+      t.occurrenceAt,
+    ),
+    index('notification_deliveries_due_idx').on(t.status, t.nextAttemptAt),
+    index('notification_deliveries_recipient_idx').on(t.recipientId),
+  ],
 );

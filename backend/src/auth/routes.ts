@@ -33,6 +33,8 @@ const oauthPayload = z.object({
   codeVerifier: z.string().min(1),
   nonce: z.string().min(1),
   tz: z.string().optional(),
+  /** "Remember me", fixed at sign-in start. Lives only inside the signed cookie, never in the callback URL. */
+  remember: z.boolean().optional(),
 });
 
 const safeEqual = (a: string, b: string) => {
@@ -59,7 +61,12 @@ export function authRouter({ env, db, getGoogle, now = () => new Date() }: AuthR
       const { url, checks } = await google.startAuthorization();
       const requestedTz = typeof req.query.tz === 'string' ? req.query.tz : undefined;
       const tz = requestedTz && isValidIanaTimezone(requestedTz) ? requestedTz : undefined;
-      res.cookie(OAUTH_COOKIE, JSON.stringify({ ...checks, tz }), oauthCookieOptions(env));
+      const remember = req.query.remember === '1';
+      res.cookie(
+        OAUTH_COOKIE,
+        JSON.stringify({ ...checks, tz, remember }),
+        oauthCookieOptions(env),
+      );
       res.redirect(302, url.toString());
     } catch (err) {
       if (err instanceof AppError && err.code === 'AUTH_NOT_CONFIGURED') {
@@ -129,10 +136,17 @@ export function authRouter({ env, db, getGoogle, now = () => new Date() }: AuthR
       await deletePendingForEmail(db, user.email); // an unverified sign-up for it is now moot
       const previous: unknown = req.cookies?.[SESSION_COOKIE];
       if (typeof previous === 'string' && previous !== '') await deleteSession(db, previous);
-      const { token, expiresAt } = await createSession(db, user.id, env.SESSION_TTL_DAYS);
+      const remember = payload.data.remember === true;
+      const ttlDays = remember ? env.REMEMBER_ME_TTL_DAYS : env.SESSION_ONLY_TTL_HOURS / 24;
+      const { token, expiresAt } = await createSession(db, user.id, ttlDays);
 
       res.clearCookie(OAUTH_COOKIE, clearOptions(oauthCookieOptions(env)));
-      res.cookie(SESSION_COOKIE, token, sessionCookieOptions(env, expiresAt));
+      // Remembered: a dated cookie. Otherwise a session cookie, which the server also expires.
+      res.cookie(
+        SESSION_COOKIE,
+        token,
+        sessionCookieOptions(env, remember ? expiresAt : undefined),
+      );
       res.redirect(302, `${env.APP_BASE_URL}/`);
     } catch (err) {
       if (err instanceof AppError && err.code === 'AUTH_NOT_CONFIGURED') {

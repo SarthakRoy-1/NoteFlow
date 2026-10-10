@@ -17,6 +17,16 @@ const envSchema = z.object({
     blankToUndefined,
     z.coerce.number().int().min(1).max(90).default(14),
   ),
+  /** Google sign-in with "Remember me": a persistent cookie and a server session of this length. */
+  REMEMBER_ME_TTL_DAYS: z.preprocess(
+    blankToUndefined,
+    z.coerce.number().int().min(1).max(90).default(30),
+  ),
+  /** Google sign-in without it: a browser-session cookie, and the server also stops honouring it after this. */
+  SESSION_ONLY_TTL_HOURS: z.preprocess(
+    blankToUndefined,
+    z.coerce.number().int().min(1).max(72).default(24),
+  ),
   DATABASE_URL: z
     .string()
     .url()
@@ -47,6 +57,31 @@ const envSchema = z.object({
   SMTP_SECURE: z.preprocess(blankToUndefined, z.enum(['true', 'false']).optional()),
   SMTP_USER: optionalString,
   SMTP_PASS: optionalString,
+  // Web Push (VAPID). Generate a pair once with `npx web-push generate-vapid-keys`. All three are
+  // needed; with any missing, push is switched off (and says so) rather than half-working.
+  VAPID_PUBLIC_KEY: optionalString,
+  VAPID_PRIVATE_KEY: optionalString,
+  /** A `mailto:` address or https URL the push services can contact. */
+  VAPID_SUBJECT: optionalString,
+  // Shared secret that lets an external scheduler (cron-job.org, GitHub Actions, Render cron) call
+  // POST /api/internal/notifications/dispatch. Unset = that endpoint does not exist.
+  NOTIFICATIONS_CRON_SECRET: z.preprocess(
+    blankToUndefined,
+    z.string().min(32, 'NOTIFICATIONS_CRON_SECRET must be at least 32 characters').optional(),
+  ),
+  // The in-process poller. Fine as a backstop; it cannot run while a free host is asleep, which is
+  // why the external trigger above exists. The delivery ledger makes running both safe.
+  NOTIFICATIONS_SCHEDULER: z.preprocess(
+    blankToUndefined,
+    z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((v) => v === 'true'),
+  ),
+  NOTIFICATIONS_POLL_SECONDS: z.preprocess(
+    blankToUndefined,
+    z.coerce.number().int().min(10).max(3600).default(60),
+  ),
   // Backend-only. Which provider answers AI requests. When unset: Gemini if it is configured,
   // otherwise Groq if it is. A chosen provider that is incomplete leaves AI off; it never falls
   // back to the other one (that could spend quota or money nobody agreed to).

@@ -33,7 +33,9 @@ cp .env.example .env     # then fill in the values (see below)
 | `PORT`                                  | API port (default 3001)                                              |
 | `APP_BASE_URL`                          | Frontend origin (default `http://localhost:5173`)                    |
 | `SESSION_SECRET`                        | Random string, 32+ chars. Signs the short-lived OAuth cookie         |
-| `SESSION_TTL_DAYS`                      | Session lifetime in days (default 14)                                |
+| `SESSION_TTL_DAYS`                      | Lifetime in days of sessions created by the (disabled) email/password routes (default 14) |
+| `REMEMBER_ME_TTL_DAYS`                  | Google sign-in with **Remember me** ticked: persistent cookie and server session length (default 30, max 90) |
+| `SESSION_ONLY_TTL_HOURS`                | Google sign-in without it: a browser-session cookie that the server also stops honouring after this (default 24) |
 | `POSTGRES_PASSWORD`                     | Password for the Docker dev database (used by `docker-compose.dev.yml`) |
 | `DATABASE_URL`                          | Dev database, e.g. `postgres://noteflow:<password>@localhost:5432/noteflow` |
 | `TEST_DATABASE_URL`                     | **Separate** test database; the name must end in `_test`             |
@@ -43,6 +45,9 @@ cp .env.example .env     # then fill in the values (see below)
 | `EMAIL_PROVIDER` (`smtp` or `resend`), `EMAIL_FROM` | Which sender delivers verification and reset mail. Without a complete provider those features are switched off in the UI and the API returns 503 (Google sign-in is unaffected). An explicit provider with missing variables leaves email off and logs a warning naming the missing variables (never values) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | SMTP sender. Gmail: `smtp.gmail.com`, `465`, `true`, your Gmail address, and a Google [App Password](https://myaccount.google.com/apppasswords) (needs 2-Step Verification). No domain required |
 | `RESEND_API_KEY` | Resend sender (needs a domain-verified `EMAIL_FROM`) |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Web Push (see **Reminder notifications**). All three are required; with any missing, push is off and the Settings page says so. Generate the pair once with `npx web-push generate-vapid-keys`; `VAPID_SUBJECT` is a contact such as `mailto:you@example.com` |
+| `NOTIFICATIONS_CRON_SECRET` | 32+ random characters. Enables `POST /api/internal/notifications/dispatch` for an external scheduler. Unset = that endpoint returns 404 |
+| `NOTIFICATIONS_SCHEDULER`, `NOTIFICATIONS_POLL_SECONDS` | The in-process poller (default on, every 60 s). It cannot run while the host is asleep, so use the external trigger on a free plan |
 | `GEMINI_API_KEY` / `GEMINI_MODEL`       | Gemini API key and model name (backend-only; the model is never hardcoded). If either is missing the app still runs and shows "AI analysis is not set up" on saved notes |
 | `AI_PROVIDER` (`gemini` or `groq`)      | Which AI provider answers. Blank = Gemini if configured, otherwise Groq if configured. A chosen provider that is incomplete turns AI off; it never falls back to the other one |
 | `GROQ_API_KEY` / `GROQ_MODEL`           | Groq API key (backend-only) and an optional model override (default `openai/gpt-oss-120b`). Uses Groq's OpenAI-compatible chat API with strict JSON-schema output; the reply is still validated by the backend |
@@ -164,7 +169,7 @@ week, monthly, hourly) stay one-off rather than being guessed. Tests never call 
 
 ## Reminder alerts
 
-There is no email or push. While the app is open, a banner (plus a count badge on the Reminders link)
+While the app is open, a banner (plus a count badge on the Reminders link)
 lists every reminder that is **pending and whose time has arrived**. The server decides using its
 clock; the browser re-checks every 30 seconds, when the tab regains focus, and at the exact moment
 the next reminder is due. The alert stays until you press **Got it**, so a reload or a second tab
@@ -184,6 +189,56 @@ an unknown email is rejected. The recipient sees the reminder's text, time and r
 never see the source note, and cannot read, edit or delete your reminder. Editing the reminder updates
 what they see; deleting it, or **Stop sharing**, removes it from their list. A reminder can be shared
 with at most 10 people, and share attempts are limited to 10 a minute.
+
+## Reminder notifications (email and Web Push)
+
+In-app alerts (above) need the app open. Email and Web Push reach you when it is not.
+
+**What is sent.** When a reminder comes due, its owner and every person it was shared with get one
+email and one push per device, each according to their own preferences. A repeating reminder notifies
+once per occurrence. Nothing is sent for a reminder that was deleted, acknowledged or moved, or for
+an occurrence older than 3 hours (an outage never floods anyone), and a recipient is not notified
+about an occurrence from before the reminder was shared with them.
+
+**Preferences** (Settings -> Reminder notifications): email on/off (default on), push on/off (default
+on, but a device only receives push after you enable it on that device), and "show the reminder text
+in the notification" (default **off**: a push says only that a reminder is due, so a lock screen
+shows nothing private; the email body does carry the text).
+
+**Delivery is durable.** Every (reminder, person, channel, occurrence) gets one row in
+`notification_deliveries`, protected by a unique key, so repeated scheduler runs, two instances, a
+restart or a retry cannot send twice. Rows are claimed with `FOR UPDATE SKIP LOCKED`, checked again
+against current data right before sending, and recorded as `sent`, `skipped` (with a reason code),
+`failed` or retried with backoff (1, 5, 15, 60 minutes, five attempts). The email provider also
+receives the delivery id as an `Idempotency-Key`. Only short status codes are stored or logged,
+never reminder text, addresses or provider messages.
+
+**Email setup (Resend).** Create a Resend API key and verify a sending domain, then set
+`EMAIL_PROVIDER=resend`, `RESEND_API_KEY` and `EMAIL_FROM` (an address on that verified domain; the
+shared `onboarding@resend.dev` sender only delivers to the Resend account owner). SMTP works too
+(`EMAIL_PROVIDER=smtp`). With no provider, no emails are queued.
+
+**Web Push setup.** Generate a VAPID pair once (`npx web-push generate-vapid-keys`) and set
+`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` on the API. The public key reaches the
+browser through `GET /api/notifications`, so the frontend needs no variable. Users then press
+**Enable notifications on this device** in Settings; the browser asks for permission only at that
+click. The service worker is `frontend/public/sw.js` (served at `/sw.js`, which both Vercel and
+`nginx.conf` do; push also needs HTTPS or localhost). Subscriptions are stored per user (up to 10
+devices), renewed whenever Settings opens or the browser rotates them, and deleted when the push
+service reports them gone (404/410). Only endpoints on known push services (Google, Mozilla, Apple,
+Microsoft) are accepted, so the server cannot be pointed at an internal address.
+
+**Scheduling in production.** The API polls every `NOTIFICATIONS_POLL_SECONDS`, but a free Render
+instance sleeps when idle and a sleeping process cannot poll. Add an external trigger that calls
+
+```text
+POST https://<your-api-host>/api/internal/notifications/dispatch
+Authorization: Bearer <NOTIFICATIONS_CRON_SECRET>
+```
+
+every 1-5 minutes (cron-job.org, a Render cron job, or `.github/workflows/dispatch-notifications.yml`,
+which needs the repository secrets `NOTEFLOW_API_URL` and `NOTIFICATIONS_CRON_SECRET`). Each call also
+wakes the instance. The endpoint is safe to call as often as you like.
 
 ## Ask AI
 
@@ -269,8 +324,21 @@ policy and a restrictive Permissions-Policy (`vercel.json`; the same headers are
 4. **Proxies:** `trust proxy` is not set. Only the (disabled) email/password routes use the client IP, so this does
    not affect the default configuration. If you re-enable them, set it for the real hop count first.
 5. **Process-local state:** rate limits are in memory, so keep `numInstances: 1`. Sessions are in PostgreSQL.
-6. Migrations are additive with no down-migration. Back up the database before applying them to anything that matters.
+6. **Notifications:** set `NOTIFICATIONS_CRON_SECRET` and the VAPID and email variables on the API (names
+   above), then point an external scheduler at the dispatch endpoint (see **Reminder notifications**).
+   Nothing in `vercel.json` changes: `/sw.js` is a static file and `/api/*` already rewrites to Render.
+7. Migrations are additive with no down-migration. Back up the database before applying them to anything that matters.
    Free Render databases and web services have limits (expiry, idle sleep); use paid plans for anything lasting.
+
+### Remember me
+
+The Google sign-in page has a **Remember me on this device** checkbox. The choice is stored inside the
+signed, short-lived OAuth cookie when sign-in starts and read back only from there, so a parameter
+added to the callback URL is ignored. Ticked: a persistent session cookie and server session of
+`REMEMBER_ME_TTL_DAYS` (30). Unticked: a browser-session cookie, and the server session also expires
+after `SESSION_ONLY_TTL_HOURS` (24), so a browser that restores session cookies cannot keep it alive
+for long. Both cookies stay `HttpOnly`, `SameSite=Lax` and `Secure` in production; state, PKCE and
+nonce checks are unchanged. Expiry is checked on every request and logout deletes the server row.
 
 ## Known limitations
 
@@ -280,11 +348,17 @@ policy and a restrictive Permissions-Policy (`vercel.json`; the same headers are
 - Repeating reminders support daily, weekday and chosen-weekday schedules only (no "every other week", monthly or
   yearly). Re-analysis recognises a reworded action only when its words are very close; a rewording that adds a
   detail is treated as a new task (a deletable extra item is preferred to a hidden real task).
-- Sharing notifies inside NoteFlow only (no email or push). The recipient must already have signed in once. A shared
+- Sharing notifies inside NoteFlow and, when they have enabled it, by email and push. The recipient must already have signed in once. A shared
   repeating reminder alerts the recipient every occurrence in the owner's timezone, independent of the owner's own
   acknowledgements.
 - Signing in with Google inside the Docker stack needs an OAuth client that lists
   `http://localhost:8080/api/auth/google/callback`; the stack itself (build, migrations, health, headers, OAuth
   start) is verified without it.
 - A reminder with no time is shown as "No time set" and never alerts.
+- Push delivery is per user, not per device: if at least one device accepts it the delivery counts as sent
+  and is not retried for the others. Push to Safari/iOS needs the site added to the home screen.
+- Signing out does not remove a device's push subscription (the point is to be told while signed out); use
+  **Turn off on this device** first on a shared computer. A browser profile belongs to whoever subscribed it last.
+- The dispatcher reads due reminders in one pass (up to 2,000 candidates a tick); a large installation would
+  want an indexed "next notify at" column.
 - Live AI checks so far: one extraction and one Ask AI request against Groq on an isolated test database.

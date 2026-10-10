@@ -114,6 +114,18 @@ export class FakeApi {
     { email: 'pat@example.com', password: 'correct horse battery', name: 'Pat Person' },
   ];
   me = { ...testUser };
+  /** GET /api/notifications. Tests change `push.available`, `email.available` and so on directly. */
+  notifications = {
+    email: { available: true, enabled: true },
+    push: {
+      available: true,
+      enabled: true,
+      showText: false,
+      publicKey: 'BFakeVapidPublicKey_0123456789',
+      subscriptions: [] as { id: string; label: string; createdAt: string }[],
+    },
+  };
+  pushDevices: { id: string; endpoint: string; label: string }[] = [];
   requests: { method: string; url: string; body?: unknown }[] = [];
   /** Per-"METHOD /path" override that returns a custom response once (or always if `sticky`). */
   private overrides = new Map<string, { make: () => Response; sticky: boolean }>();
@@ -349,6 +361,39 @@ export class FakeApi {
         return apiError(401, 'REAUTH_FAILED', 'That password is not correct.');
       }
       return json({ url: 'https://accounts.example.test/authorize?state=abc' });
+    }
+    if (url === '/api/notifications' && method === 'GET') return json(this.notifications);
+    if (url === '/api/notifications' && method === 'PATCH') {
+      const allowed = ['emailEnabled', 'pushEnabled', 'pushShowText'];
+      if (!body || Object.keys(body).some((k) => !allowed.includes(k))) {
+        return apiError(422, 'VALIDATION_FAILED', 'Nothing to change.');
+      }
+      const n = this.notifications;
+      if (body.emailEnabled !== undefined) n.email.enabled = body.emailEnabled;
+      if (body.pushEnabled !== undefined) n.push.enabled = body.pushEnabled;
+      if (body.pushShowText !== undefined) n.push.showText = body.pushShowText;
+      return json(n);
+    }
+    if (url === '/api/notifications/push-subscriptions' && method === 'POST') {
+      const existing = this.pushDevices.find((d) => d.endpoint === body.endpoint);
+      const id = existing?.id ?? `device-${this.pushDevices.length + 1}`;
+      if (!existing) this.pushDevices.push({ id, endpoint: body.endpoint, label: body.label });
+      this.notifications.push.subscriptions = this.pushDevices.map((d) => ({
+        id: d.id,
+        label: d.label,
+        createdAt: '2026-10-08T10:00:00.000Z',
+      }));
+      return json({ id }, 201);
+    }
+    const pushDelete = /^\/api\/notifications\/push-subscriptions\/([^/]+)$/.exec(url);
+    if (pushDelete && method === 'DELETE') {
+      this.pushDevices = this.pushDevices.filter((d) => d.id !== pushDelete[1]);
+      this.notifications.push.subscriptions = this.pushDevices.map((d) => ({
+        id: d.id,
+        label: d.label,
+        createdAt: '2026-10-08T10:00:00.000Z',
+      }));
+      return new Response(null, { status: 204 });
     }
     if (url === '/api/me') return json({ user: this.me });
     if (url === '/api/auth/logout') {

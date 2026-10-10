@@ -81,7 +81,8 @@ describe('GET /api/auth/google/callback', () => {
     expect(setCookie).toMatch(/noteflow_session=[A-Za-z0-9_-]{40,}/);
     expect(setCookie).toMatch(/noteflow_session=[^\n]*HttpOnly/i);
     expect(setCookie).toMatch(/noteflow_session=[^\n]*SameSite=Lax/i);
-    expect(setCookie).toMatch(/noteflow_session=[^\n]*Expires=/i);
+    // Without "Remember me" it is a browser-session cookie: no Expires, no Max-Age.
+    expect(setCookie).not.toMatch(/noteflow_session=[^\n]*(Expires|Max-Age)=/i);
 
     // PKCE verifier and nonce from the start step reach the token exchange; state matches.
     expect(google.completed).toHaveLength(1);

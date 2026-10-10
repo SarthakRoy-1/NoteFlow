@@ -4,13 +4,14 @@ import type { Env } from '../config/env.js';
 export const SESSION_COOKIE = 'noteflow_session';
 export const OAUTH_COOKIE = 'noteflow_oauth';
 
-export function sessionCookieOptions(env: Env, expiresAt: Date): CookieOptions {
+/** No `expiresAt` = a browser-session cookie (dropped when the browser closes). */
+export function sessionCookieOptions(env: Env, expiresAt?: Date): CookieOptions {
   return {
     httpOnly: true,
     sameSite: 'lax',
     secure: env.NODE_ENV === 'production',
     path: '/',
-    expires: expiresAt,
+    ...(expiresAt ? { expires: expiresAt } : {}),
   };
 }
 

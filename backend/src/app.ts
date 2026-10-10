@@ -25,6 +25,9 @@ import { remindersRouter } from './modules/reminders/reminders.routes.js';
 import { sharedRemindersRouter } from './modules/shares/shares.routes.js';
 import { todosRouter } from './modules/todos/todos.routes.js';
 import { meRouter } from './modules/users/me.routes.js';
+import { runDispatch } from './notifications/dispatcher.js';
+import { dispatchTrigger, notificationsRouter } from './notifications/notifications.routes.js';
+import { createPushSender, type PushSender } from './notifications/push.js';
 import { healthRouter } from './routes/health.js';
 
 const MINUTE = 60_000;
@@ -73,6 +76,8 @@ export interface AppDeps {
   writesPerMinute?: number;
   /** Override the email sender (tests). Defaults to the configured provider (Resend or SMTP), else "not configured". */
   email?: EmailSender;
+  /** Override the Web Push sender (tests). Defaults to VAPID from the environment, else "not configured". */
+  push?: PushSender;
   /** Override the password sign-in/registration limiters (tests). */
   authLimiters?: PasswordAuthLimiters;
 }
@@ -87,6 +92,7 @@ export function createApp({
   writesPerMinute,
   authLimiters,
   email,
+  push,
 }: AppDeps) {
   const app = express();
   app.disable('x-powered-by');
@@ -101,6 +107,9 @@ export function createApp({
   app.use('/api', originCheck(env.APP_BASE_URL));
   const clock = now ?? (() => new Date());
   const limiters = authLimiters ?? defaultAuthLimiters(clock);
+  // Reminder notifications need a sender whether or not password sign-up is enabled.
+  const emailSender = email ?? createEmailSender(env);
+  const pushSender = push ?? createPushSender(env);
 
   // Created on first use so missing Google config is a controlled per-request error.
   let google: GoogleAuth | undefined;
@@ -116,7 +125,7 @@ export function createApp({
         env,
         db,
         limiters,
-        email: email ?? createEmailSender(env),
+        email: emailSender,
         now: clock,
       }),
     );
@@ -130,6 +139,22 @@ export function createApp({
       next(notFound('That endpoint does not exist.')),
     );
   }
+
+  // Called by an external scheduler (see NOTIFICATIONS_CRON_SECRET); never by a browser.
+  app.post(
+    '/api/internal/notifications/dispatch',
+    dispatchTrigger({
+      secret: env.NOTIFICATIONS_CRON_SECRET,
+      run: () =>
+        runDispatch({
+          db,
+          email: emailSender,
+          push: pushSender,
+          appBaseUrl: env.APP_BASE_URL,
+          now: clock,
+        }),
+    }),
+  );
 
   // Everything below requires a valid session. Add new feature routers here.
   const protectedApi = Router();
@@ -151,6 +176,10 @@ export function createApp({
     );
   });
   protectedApi.use('/me', meRouter(db));
+  protectedApi.use(
+    '/notifications',
+    notificationsRouter({ db, email: emailSender, push: pushSender, now: clock }),
+  );
   if (env.ENABLE_PASSWORD_AUTH) {
     protectedApi.use(
       '/auth/link',

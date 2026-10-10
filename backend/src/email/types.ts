@@ -2,6 +2,8 @@ export interface EmailMessage {
   to: string;
   subject: string;
   text: string;
+  /** Lets a provider that supports it collapse a retried send of the same message into one. */
+  idempotencyKey?: string;
 }
 
 export interface EmailSender {

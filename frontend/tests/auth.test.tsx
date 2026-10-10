@@ -35,6 +35,20 @@ describe('auth UI', () => {
     expect(link.getAttribute('href')).toMatch(/^\/api\/auth\/google\?tz=/);
   });
 
+  it('"Remember me" is off by default and adds remember=1 to the sign-in link when ticked', async () => {
+    const api = new FakeApi();
+    api.signedIn = false;
+    renderAt('/login');
+    const link = await screen.findByRole('link', { name: /sign in with google/i });
+    const box = screen.getByRole('checkbox', { name: /remember me/i });
+    expect(box).not.toBeChecked();
+    expect(link.getAttribute('href')).not.toContain('remember');
+    await userEvent.click(box);
+    expect(link.getAttribute('href')).toMatch(/^\/api\/auth\/google\?tz=.+&remember=1$/);
+    await userEvent.click(box);
+    expect(link.getAttribute('href')).not.toContain('remember');
+  });
+
   it.each([
     ['access_denied', /cancelled/i],
     ['not_configured', /not set up/i],

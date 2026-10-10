@@ -3,6 +3,12 @@ import { createApp } from '../../src/app.js';
 import type { PasswordAuthLimiters } from '../../src/auth/password.routes.js';
 import { EmailDeliveryError, type EmailMessage, type EmailSender } from '../../src/email/types.js';
 import { createRateLimiter } from '../../src/lib/rateLimit.js';
+import type {
+  PushOutcome,
+  PushPayload,
+  PushSender,
+  PushTarget,
+} from '../../src/notifications/push.js';
 import type { AIProvider } from '../../src/ai/provider/index.js';
 import type { GoogleAuth, GoogleIdentity, OAuthChecks } from '../../src/auth/google.js';
 import { hashPassword } from '../../src/auth/password.js';
@@ -172,6 +178,32 @@ export class FakeEmail implements EmailSender {
   }
 }
 
+/** Records pushes instead of contacting a push service. Outcomes can be scripted per endpoint. */
+export class FakePush implements PushSender {
+  configured = true;
+  publicKey: string | null = 'BFakeVapidPublicKey_0123456789';
+  sent: {
+    target: PushTarget;
+    payload: PushPayload;
+    options: { topic: string; ttlSeconds: number };
+  }[] = [];
+  attempts = 0;
+  /** Outcome per endpoint; anything unlisted uses `fallback`. */
+  outcomes = new Map<string, PushOutcome>();
+  fallback: PushOutcome = 'sent';
+
+  async send(
+    target: PushTarget,
+    payload: PushPayload,
+    options: { topic: string; ttlSeconds: number },
+  ) {
+    this.attempts++;
+    const outcome = this.outcomes.get(target.endpoint) ?? this.fallback;
+    if (outcome === 'sent') this.sent.push({ target, payload, options });
+    return outcome;
+  }
+}
+
 export function buildApp(
   db: TestDb,
   env = testEnv(),
@@ -183,6 +215,7 @@ export function buildApp(
     writesPerMinute?: number;
     authLimiters?: PasswordAuthLimiters;
     email?: EmailSender;
+    push?: PushSender;
   } = {},
 ) {
   return createApp({
@@ -196,5 +229,6 @@ export function buildApp(
     writesPerMinute: extra.writesPerMinute ?? 1_000_000,
     authLimiters: extra.authLimiters ?? generousAuthLimiters(),
     email: extra.email ?? new FakeEmail(),
+    push: extra.push ?? new FakePush(),
   });
 }

@@ -41,3 +41,10 @@ services:
       - key: GROQ_API_KEY
         sync: false
       # GROQ_MODEL is optional. ENABLE_PASSWORD_AUTH is deliberately not set (off by default).
+#
+# Reminder notifications (set these in the dashboard; names only, never values):
+#   EMAIL_PROVIDER=resend, RESEND_API_KEY, EMAIL_FROM        - email delivery
+#   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT       - Web Push (npx web-push generate-vapid-keys)
+#   NOTIFICATIONS_CRON_SECRET                                - lets an external scheduler call
+#                                                              POST /api/internal/notifications/dispatch
+# Optional: REMEMBER_ME_TTL_DAYS (30), SESSION_ONLY_TTL_HOURS (24).
