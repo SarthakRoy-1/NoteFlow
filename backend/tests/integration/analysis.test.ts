@@ -244,9 +244,12 @@ describe('AI failures never block saving', () => {
     const res = await post(app, u.cookie, { title: 'T', content: 'buy milk' });
     const text = JSON.stringify(res.body);
     expect(text).not.toContain('FAKE_GEMINI_KEY');
-    expect(text).not.toContain('401');
+    // Check the error text itself: a bare '401' also matches random ids and timestamps in the JSON.
+    const leaked = /401|FAKE_GEMINI_KEY|body=/;
+    expect(res.body.note.analysis.status).toBe('failed');
+    expect(res.body.note.analysis.error).not.toMatch(leaked);
     const [row] = await db.select().from(notes);
-    expect(row?.analysisError).not.toContain('FAKE_GEMINI_KEY');
+    expect(row?.analysisError).not.toMatch(leaked);
   });
 
   it('invalid items are never persisted even when others in the reply are valid', async () => {

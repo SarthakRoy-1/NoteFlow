@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { askHistory, notes } from '../../src/db/schema.js';
-import { createRateLimiter } from '../../src/lib/rateLimit.js';
+import { AI_CALLS_PER_MINUTE, createRateLimiter } from '../../src/lib/rateLimit.js';
 import { FakeAI } from '../helpers/fakeAi.js';
 import {
   FIXED_NOW,
@@ -19,7 +19,7 @@ beforeEach(() => resetDb(db));
 
 const answer = (text = 'An answer.') => JSON.stringify({ answer: text, answerable: true });
 
-/** App with a clock the test moves by hand. `perMinute` undefined = the real default (10). */
+/** App with a clock the test moves by hand. `perMinute` undefined = the real default (AI_CALLS_PER_MINUTE). */
 function setup(perMinute?: number) {
   const ai = new FakeAI();
   const clock = { at: FIXED_NOW.getTime() };
@@ -79,18 +79,19 @@ describe('createRateLimiter', () => {
 });
 
 describe('Ask AI rate limit', () => {
-  it('allows 10 questions a minute, then answers 429 without calling the AI', async () => {
+  it('allows the default number of questions a minute, then answers 429 without calling the AI', async () => {
     const { app, ai } = setup();
     const u = await createUserWithSession(db);
     await seedNote(u.user.id);
-    for (let i = 0; i < 10; i++) ai.respondWith(answer());
+    for (let i = 0; i < AI_CALLS_PER_MINUTE; i++) ai.respondWith(answer());
 
-    for (let i = 0; i < 10; i++) expect((await ask(app, u.cookie)).status).toBe(201);
+    for (let i = 0; i < AI_CALLS_PER_MINUTE; i++)
+      expect((await ask(app, u.cookie)).status).toBe(201);
     const limited = await ask(app, u.cookie);
     expect(limited.status).toBe(429);
     expect(limited.body.error.code).toBe('AI_RATE_LIMITED');
-    expect(ai.requests).toHaveLength(10);
-    expect(await db.select().from(askHistory)).toHaveLength(10);
+    expect(ai.requests).toHaveLength(AI_CALLS_PER_MINUTE);
+    expect(await db.select().from(askHistory)).toHaveLength(AI_CALLS_PER_MINUTE);
   });
 
   it('works again once the minute has passed', async () => {

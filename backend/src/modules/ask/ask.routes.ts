@@ -24,6 +24,19 @@ export interface AskDeps {
  * are retrieved here, for that user only, and the sources shown with the answer are exactly the
  * notes retrieved (never ids supplied by the client or the model).
  */
+/**
+ * The retrieved notes the model says it used. Positions come from the model but are only ever
+ * looked up in our own list; out-of-range or repeated ones are ignored. With nothing usable we
+ * keep showing every retrieved note rather than none.
+ */
+function citedNotes<T extends { id: string; title: string }>(found: T[], used: number[]) {
+  const picked = [...new Set(used)]
+    .filter((n) => n >= 1 && n <= found.length)
+    .sort((a, b) => a - b);
+  const notes = picked.length > 0 ? picked.map((n) => found[n - 1] as T) : found;
+  return notes.map((n) => ({ id: n.id, title: n.title }));
+}
+
 export function askRouter({ db, ai, now, limiter }: AskDeps) {
   const router = Router();
 
@@ -67,7 +80,7 @@ export function askRouter({ db, ai, now, limiter }: AskDeps) {
       question,
       answer: result.answer,
       status: result.answerable ? 'answered' : 'no_info',
-      sources: result.answerable ? found.map((n) => ({ id: n.id, title: n.title })) : [],
+      sources: result.answerable ? citedNotes(found, result.used_notes) : [],
       createdAt: now(),
     });
     res.status(201).json({ ask });

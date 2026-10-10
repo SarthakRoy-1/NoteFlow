@@ -31,5 +31,8 @@ export function createRateLimiter(options: {
   };
 }
 
-/** Per-user AI calls: note analysis and Ask AI share one allowance. */
-export const AI_CALLS_PER_MINUTE = 10;
+/**
+ * Per-user AI calls: note analysis and Ask AI share one allowance. Kept under Gemini's free-tier
+ * 5 requests/minute so one failed call's retry still fits; raise it with a paid tier.
+ */
+export const AI_CALLS_PER_MINUTE = 4;

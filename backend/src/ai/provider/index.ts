@@ -1,5 +1,6 @@
 import type { Env } from '../../config/env.js';
 import { GeminiProvider } from './gemini.js';
+import { GroqProvider } from './groq.js';
 import { AIProviderError, type AIProvider } from './types.js';
 
 export type { AIProvider, AIErrorKind, StructuredRequest } from './types.js';
@@ -13,6 +14,14 @@ class UnconfiguredProvider implements AIProvider {
 }
 
 export function createAIProvider(env: Env): AIProvider {
-  if (!env.GEMINI_API_KEY || !env.GEMINI_MODEL) return new UnconfiguredProvider();
-  return new GeminiProvider({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL });
+  const geminiReady = Boolean(env.GEMINI_API_KEY && env.GEMINI_MODEL);
+  const choice =
+    env.AI_PROVIDER ?? (geminiReady ? 'gemini' : env.GROQ_API_KEY ? 'groq' : undefined);
+  if (choice === 'groq' && env.GROQ_API_KEY) {
+    return new GroqProvider({ apiKey: env.GROQ_API_KEY, model: env.GROQ_MODEL });
+  }
+  if (choice === 'gemini' && env.GEMINI_API_KEY && env.GEMINI_MODEL) {
+    return new GeminiProvider({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL });
+  }
+  return new UnconfiguredProvider();
 }

@@ -518,6 +518,64 @@ describe('answers and structured output', () => {
     expect(await db.select().from(askHistorySources)).toHaveLength(0);
   });
 
+  describe('source attribution (used_notes)', () => {
+    // 'Strong' matches more terms, so it is Note 1 and 'Weak' is Note 2 (see the ranking test).
+    const twoNotes = async (usedNotes: unknown) => {
+      const { app, ai } = setup();
+      const u = await createUserWithSession(db);
+      await seedNote(u.user.id, 'Strong', 'budget meeting alpha project', new Date('2026-01-01'));
+      await seedNote(u.user.id, 'Weak', 'budget only', new Date('2026-06-01'));
+      ai.respondWith(
+        JSON.stringify({ answer: 'See notes.', answerable: true, used_notes: usedNotes }),
+      );
+      const res = await ask(app, u.cookie, { question: 'budget meeting alpha project' });
+      return res.body.ask.sources.map((x: { title: string }) => x.title) as string[];
+    };
+
+    it.each([
+      ['only the second note', [2], ['Weak']],
+      ['only the first note', [1], ['Strong']],
+      ['retrieval order, repeats ignored', [2, 1, 2], ['Strong', 'Weak']],
+      ['the valid position when mixed with an out-of-range one', [2, 7], ['Weak']],
+      ['every retrieved note when all positions are invalid', [0, 3, -1, 99], ['Strong', 'Weak']],
+      ['every retrieved note when the list is empty', [], ['Strong', 'Weak']],
+    ])('shows %s', async (_label, used, expected) => {
+      expect(await twoNotes(used)).toEqual(expected);
+    });
+
+    it('rejects non-integer positions as unusable model output', async () => {
+      const { app, ai } = setup();
+      const u = await createUserWithSession(db);
+      await seedNote(u.user.id, 'Strong', 'budget meeting alpha project');
+      ai.respondWith(JSON.stringify({ answer: 'x', answerable: true, used_notes: ['abc'] }));
+      const res = await ask(app, u.cookie, { question: 'budget meeting alpha project' });
+      expect(res.status).toBe(502);
+      expect(res.body.error.code).toBe('AI_BAD_OUTPUT');
+      expect(await historyRows()).toHaveLength(0);
+    });
+
+    it('shows no sources when unanswerable even if the model lists notes', async () => {
+      const { app, ai } = setup();
+      const u = await createUserWithSession(db);
+      await seedNote(u.user.id, 'Strong', 'budget meeting alpha project');
+      ai.respondWith(
+        JSON.stringify({ answer: 'Not in notes.', answerable: false, used_notes: [1] }),
+      );
+      const res = await ask(app, u.cookie, { question: 'budget meeting alpha project' });
+      expect(res.body.ask.sources).toEqual([]);
+    });
+
+    it('asks the model for used_notes in the prompt and schema', async () => {
+      const { app, ai } = setup();
+      const u = await createUserWithSession(db);
+      await seedNote(u.user.id, 'Strong', 'budget meeting alpha project');
+      ai.respondWith(answer());
+      await ask(app, u.cookie, { question: 'budget meeting alpha project' });
+      expect(ai.requests[0]!.system).toMatch(/used_notes/);
+      expect(answerJsonSchema.required).toContain('used_notes');
+    });
+  });
+
   it('shows no sources when the model says the notes are not enough', async () => {
     const { app, ai } = setup();
     const u = await createUserWithSession(db);

@@ -44,11 +44,11 @@ export interface AppDeps {
   db: Db;
   /** Override the Google client (tests). Defaults to the real OIDC implementation. */
   googleFactory?: () => GoogleAuth;
-  /** Override the AI provider (tests). Defaults to Gemini, or an "unconfigured" stub without a key. */
+  /** Override the AI provider (tests). Defaults to the one AI_PROVIDER selects, or an "unconfigured" stub. */
   ai?: AIProvider;
   /** Clock used to resolve relative dates (tests). */
   now?: () => Date;
-  /** Per-user AI calls per minute (defaults to 10; tests override). */
+  /** Per-user AI calls per minute (defaults to AI_CALLS_PER_MINUTE; tests override). */
   aiCallsPerMinute?: number;
   /** Override the email sender (tests). Defaults to the configured provider (Resend or SMTP), else "not configured". */
   email?: EmailSender;

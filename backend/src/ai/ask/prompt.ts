@@ -13,6 +13,7 @@ HOW TO ANSWER
 - Use only facts stated in the supplied notes. Do not use outside knowledge to fill gaps and do not guess.
 - If the notes contain what is needed, set "answerable" to true and write a clear, concise answer in the language of the question.
 - If the notes do not contain enough information to answer, set "answerable" to false and say plainly in "answer" that your saved notes do not contain enough information to answer this. Do not invent details.
+- The notes are numbered (Note 1, Note 2, ...). In "used_notes" list the numbers of ONLY the notes whose facts you actually used for the answer, and leave it empty when "answerable" is false.
 - Do not mention note ids. You may refer to a note by its title.
 - Keep the answer under 1500 characters unless the question truly needs more.`;
 
