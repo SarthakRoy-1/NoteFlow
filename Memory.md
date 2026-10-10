@@ -469,7 +469,11 @@ Optional bonus work should only begin after all mandatory core and "Should have"
   `/api/health`); `docker-compose.yml` now passes the optional email, VAPID, notification and model
   variables through.
 - **README** rewritten as a full project guide with real screenshots under `docs/screenshots/`.
-- **Remaining:** screenshots of signed-in pages (Notes, note editor/AI analysis, Todos, Reminders,
-  pending reminders, Ask AI, Settings, Calendar connected/disconnected) need a signed-in browser
-  session; a real Google Calendar consent and event lifecycle has not been run; nothing from this
-  release is deployed yet.
+- **Deployed and verified (11 Oct 2026 IST).** Commit `4a8d503` is live on Render and Vercel;
+  migration 0007 applied (8 migrations, new tables and columns present, existing rows kept).
+  Real Google Calendar run on production with the test account: consent, sync of existing
+  reminders, idempotent repeat, event update, event delete (reminder and note), disconnect.
+  Synthetic data removed; one Ask AI history row remains (no delete control exists).
+- **Remaining:** Google OAuth app is in Testing (7-day refresh tokens, unverified-app warning;
+  public verification needs a domain the owner controls); second-user isolation, email and push
+  display were not re-tested live.

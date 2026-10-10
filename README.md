@@ -62,10 +62,10 @@ timed reminders extracted automatically, with alerts in the browser, by email or
 - Per-user data isolation: every query is scoped to the signed-in user.
 
 **Current implementation status.** All Core and Should-have items of the assignment are implemented.
-The app is deployed (Vercel + Render). Two pieces of recent work exist in this repository but are
-**not yet deployed to production** at the time of writing: Google Calendar synchronization (with
-"Sync existing reminders") and pending reminder drafts, together with the public Privacy Policy and
-Terms pages. See [Deployment](#14-deployment) and `Memory.md` for the exact state.
+The app is deployed (Vercel + Render) and the release in commit `4a8d503` (Google Calendar
+synchronization with "Sync existing reminders", pending reminder drafts, the Privacy Policy and
+Terms pages, migration `0007`) was verified live on 11 October 2026 (IST). See
+[Deployment](#14-deployment) for exactly what was and was not verified.
 
 ---
 
@@ -79,16 +79,16 @@ Terms pages. See [Deployment](#14-deployment) and `Memory.md` for the exact stat
 | AI analysis of notes into todos and reminders | **Implemented**, **External** | Groq (default in production) or Gemini behind an `AIProvider` interface. Without a key the app runs and says "AI analysis is not set up". |
 | Todos | **Implemented** | Open/done, due dates, edit, delete. AI-created todos do not come back after deletion. |
 | Reminders and recurring reminders | **Implemented** | One-off, or repeating on chosen weekdays at a time of day; wall clock kept across daylight-saving changes. |
-| Pending reminder drafts | **Implemented** (not yet deployed) | An AI reminder without a valid date and time is kept as a draft ("Needs a date and time"). It never alerts and never reaches the calendar until the user completes it. |
+| Pending reminder drafts | **Implemented**, **Verified in production** | An AI reminder without a valid date and time is kept as a draft ("Needs a date and time"). It never alerts and never reaches the calendar until the user completes it. |
 | In-app alerts | **Implemented** | A banner and count badge for due reminders while the app is open. |
 | Email and Web Push notifications | **Optional**, **External** | Needs Resend/SMTP and VAPID keys. Verified in production: one real email to the Resend account owner; push accepted by the browser push service. Showing the notification on a device was not confirmed. |
 | Notification scheduler | **Implemented**, **External** | In-process poller (every 60 s while the host is awake) plus an authenticated external trigger endpoint. See [scheduler behaviour](#reminder-notifications-and-the-scheduler). |
 | Sharing a reminder with another NoteFlow user | **Implemented** | By verified account email, up to 10 people. |
 | Ask AI (questions about your notes) | **Implemented**, **External** | Retrieval is keyword based (PostgreSQL full text), answers carry their source notes. |
-| Google Calendar integration | **Optional**, **External**, **Unverified** | Separate consent from sign-in. Covered by automated tests with a mocked Google client; **a real Google consent and event lifecycle has not been run**. |
-| Sync existing reminders | **Implemented**, **Unverified** | Settings action that sends reminders saved before connecting, in small idempotent batches. Mocked-Google tests only. |
+| Google Calendar integration | **Optional**, **External**, **Verified in production** | Separate consent from sign-in. Automated tests use a mocked Google client; in addition one real Google consent, event create, update, delete and disconnect was run on production with a test account (see [Google Calendar](#google-calendar)). The Google OAuth app is in Testing mode. |
+| Sync existing reminders | **Implemented**, **Verified in production** | Settings action that sends reminders saved before connecting, in small idempotent batches; a repeat press creates nothing new. |
 | Settings (time zone, notifications, calendar, close button) | **Implemented** | Time zone is an IANA id stored per user. |
-| Privacy Policy and Terms of Service | **Implemented** (not yet deployed) | Public, no sign-in, at `/privacy` and `/terms`; linked from the sign-in page and Settings. |
+| Privacy Policy and Terms of Service | **Implemented**, **Verified in production** | Public, no sign-in, at `/privacy` and `/terms`; linked from the sign-in page and Settings. |
 | Docker | **Implemented**, **Verified** | `docker compose up --build` builds and starts PostgreSQL + API + web; verified from a clean example configuration on 11 October 2026 (IST). See [section 8](#8-run-on-another-system-with-docker). |
 
 ### How AI analysis works
@@ -200,10 +200,20 @@ Optional, and separate from signing in (sign-in only requests `openid email prof
 7. **Disconnect** deletes the stored token, asks Google to revoke the grant and stops syncing. Events
    already in the calendar are not removed.
 
-**Not verified.** All of this is exercised by automated tests against a mocked Google client. A real
-Google consent, token exchange and event create/update/delete has **not** been run. While the Google
-OAuth app is in "Testing" status, Google expires refresh tokens after about 7 days, which shows as
-"needs reconnect". See [section 10](#10-authentication-and-integrations).
+**What was verified, and how.** The behaviour is covered by automated tests against a mocked Google
+client. In addition, on 11 October 2026 a real run was made on production with the owner's test
+account and synthetic `QA-SYNTHETIC` notes: Google's consent screen showed "See, create, change,
+and delete events on Google calendars you own"; connecting succeeded; **Sync existing reminders**
+created exactly two events at the right local times (confirmed in Google Calendar); a second press
+reported everything up to date and created nothing new; editing a reminder's time moved the same
+event; deleting a reminder and deleting a note removed their events; **Disconnect** removed the
+stored connection. The test data was then deleted.
+
+**Not independently observed.** That Google actually honoured the revoke request on disconnect (the
+code calls it and removes the local token), and behaviour for users other than the one test account.
+While the Google OAuth app is in "Testing" status the consent screen says "Google hasn't verified
+this app", only listed test users can connect, and Google expires refresh tokens after about 7 days,
+which shows as "needs reconnect". See [section 10](#10-authentication-and-integrations).
 
 ### Ask AI
 
@@ -255,10 +265,19 @@ calendar integration, availability and liability.
 
 ### Signed-in screens
 
-Screenshots of the signed-in pages (Notes, note editor and AI analysis, Todos, Reminders, pending
-reminders, Ask AI, Settings, Calendar connected and disconnected) are **not included yet**: capturing
-them needs a signed-in browser session, which was not available when this README was written. They
-are tracked as remaining work in `Memory.md`. Nothing in this section is a mock-up.
+![AI analysis with a pending reminder](docs/screenshots/04-ai-analysis-pending-reminder.png)
+
+**Note with AI analysis and a pending reminder (production).** A synthetic note with a todo, a timed
+reminder and a reminder that has no date or time. The first two were created; the third is kept
+under "Needs a date and time" and nothing is guessed.
+
+![Google Calendar connected](docs/screenshots/08-calendar-connected.png)
+
+**Settings, Google Calendar connected (production).** The connected state with the "Sync existing
+reminders" and "Disconnect Google Calendar" actions.
+
+Other signed-in pages (Todos, Reminders, Ask AI, the full Settings page) are not shown: the
+application lists the owner's own notes there, and no screenshot with private content is published.
 
 ---
 
@@ -718,10 +737,14 @@ slow, and in-process polling stops), and free Render PostgreSQL databases expire
 time; check the expiry in the Render dashboard and upgrade or migrate before it. Free plans block
 outbound SMTP.
 
-**Deployment status.** At the time of writing the Calendar synchronization, reminder drafts,
-Settings close button, "Sync existing reminders", and the Privacy/Terms pages exist in this
-repository but have **not** been deployed. Migration `0007` will run automatically on the next
-Render deploy.
+**Deployment status (verified 11 October 2026, IST).** Commit `4a8d503` is live on Render and
+Vercel. The Render log shows `Migrations applied.` and the API listening; the production database
+reports 8 applied migrations, the two new tables and both new `reminders` columns, with existing
+rows intact. `/privacy` and `/terms` render their actual text on direct open and reload, and
+`/api/health` returns `{"status":"ok"}`. Signed in as the test account, the core flows (notes,
+AI extraction, pending reminders, todos, in-app alerts, Ask AI) and the Calendar lifecycle above
+were exercised. Not tested live: a second user's isolation (covered by automated tests only),
+email delivery and push display.
 
 ---
 
@@ -756,7 +779,8 @@ source `frontend/src/features/legal`) describe the real behaviour. Contact:
 - Calendar deletion is best effort and temporary sync failures are not retried automatically (they
   are retried by an edit or **Sync existing reminders**).
 - Changing your time zone marks events stale; they are re-sent in the new zone on the next sync.
-- Real Google OAuth consent and Calendar events were not exercised end to end.
+- Calendar was verified end to end with one test account only, in Google's Testing mode; the revoke
+  call on disconnect was not independently observed.
 - OS-level display and click of push notifications were not confirmed. Email reaches only the Resend
   account owner while using the shared sandbox sender.
 - Ask AI retrieval is keyword based, not semantic. Repeating reminders support daily, weekday and
