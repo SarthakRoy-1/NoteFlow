@@ -16,6 +16,7 @@ import {
   openTestDb,
   resetDb,
   testEnv,
+  PASSWORD_AUTH_ON,
 } from '../helpers/testApp.js';
 
 const { db, pool } = openTestDb();
@@ -25,7 +26,7 @@ afterAll(() => pool.end());
 beforeEach(async () => {
   await resetDb(db);
   email = new FakeEmail();
-  app = buildApp(db, testEnv(), undefined, { email });
+  app = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, { email });
 });
 
 type Agent = ReturnType<typeof request.agent>;
@@ -120,9 +121,15 @@ describe('POST /api/auth/register', () => {
   });
 
   it('GET /api/auth/config tells the UI whether email works', async () => {
-    expect((await request(app).get('/api/auth/config')).body).toEqual({ emailEnabled: true });
+    expect((await request(app).get('/api/auth/config')).body).toEqual({
+      passwordAuthEnabled: true,
+      emailEnabled: true,
+    });
     email.configured = false;
-    expect((await request(app).get('/api/auth/config')).body).toEqual({ emailEnabled: false });
+    expect((await request(app).get('/api/auth/config')).body).toEqual({
+      passwordAuthEnabled: true,
+      emailEnabled: false,
+    });
   });
 
   it('a provider failure does not change the response or leak anything', async () => {
@@ -198,7 +205,9 @@ describe('POST /api/auth/login', () => {
   });
 
   it('marks the session cookie Secure in production', async () => {
-    const prod = buildApp(db, testEnv({ NODE_ENV: 'production' }), undefined, { email });
+    const prod = buildApp(db, testEnv({ ...PASSWORD_AUTH_ON, NODE_ENV: 'production' }), undefined, {
+      email,
+    });
     const res = await login(request.agent(prod));
     expect(String(res.headers['set-cookie']?.[0])).toMatch(/Secure/i);
   });
@@ -345,7 +354,7 @@ describe('data isolation between password accounts', () => {
 
 describe('Google OAuth and password accounts together', () => {
   const startAndFinish = async (google: FakeGoogle) => {
-    const agent = request.agent(buildApp(db, testEnv(), google, { email }));
+    const agent = request.agent(buildApp(db, testEnv(PASSWORD_AUTH_ON), google, { email }));
     const start = await agent.get('/api/auth/google');
     const state = new URL(String(start.headers.location)).searchParams.get('state');
     const res = await agent.get(`/api/auth/google/callback?code=c&state=${state}`);
@@ -411,7 +420,7 @@ describe('rate limiting', () => {
 
   it('throttles sign-up per IP and recovers after the window', async () => {
     const clock = mutableClock();
-    const limited = buildApp(db, testEnv(), undefined, {
+    const limited = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, {
       email,
       authLimiters: limiters(clock.now, { register: 2 }),
     });
@@ -425,7 +434,7 @@ describe('rate limiting', () => {
   });
 
   it('limits emails sent to one address, so a victim’s inbox cannot be flooded', async () => {
-    const limited = buildApp(db, testEnv(), undefined, {
+    const limited = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, {
       email,
       authLimiters: limiters(() => new Date(), { emailSend: 2 }),
     });
@@ -438,7 +447,7 @@ describe('rate limiting', () => {
   it('throttles repeated guesses against one account, but not other accounts', async () => {
     await createPasswordUserWithSession(db);
     await createPasswordUserWithSession(db, { email: 'other@example.com' });
-    const limited = buildApp(db, testEnv(), undefined, {
+    const limited = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, {
       email,
       authLimiters: limiters(() => new Date(), { loginEmail: 3 }),
     });
@@ -453,7 +462,7 @@ describe('rate limiting', () => {
   });
 
   it('throttles login attempts per IP across different emails', async () => {
-    const limited = buildApp(db, testEnv(), undefined, {
+    const limited = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, {
       email,
       authLimiters: limiters(() => new Date(), { loginIp: 2 }),
     });

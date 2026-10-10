@@ -83,7 +83,7 @@ export function authRouter({ env, db, getGoogle, now = () => new Date() }: AuthR
       };
 
       // "Connect Google" attempts share this redirect URI; their one-time state is stored server-side.
-      if (typeof req.query.state === 'string') {
+      if (env.ENABLE_PASSWORD_AUTH && typeof req.query.state === 'string') {
         const attempt = await consumeLinkAttempt(db, hashToken(req.query.state), now());
         if (attempt) {
           return await finishGoogleLink(

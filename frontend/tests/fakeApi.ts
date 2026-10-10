@@ -88,6 +88,8 @@ export class FakeApi {
   signedIn = true;
   /** Whether the fake server can send email (GET /api/auth/config). */
   emailEnabled = true;
+  /** Whether custom email/password auth is on (the server default is off). */
+  passwordAuthEnabled = true;
   /** Password accounts known to the fake sign-in/registration endpoints. */
   accounts: { email: string; password: string; name: string }[] = [
     { email: 'pat@example.com', password: 'correct horse battery', name: 'Pat Person' },
@@ -226,7 +228,11 @@ export class FakeApi {
       this.me = { ...testUser, email: account.email, name: account.name };
       return json({ user: this.me });
     }
-    if (url === '/api/auth/config') return json({ emailEnabled: this.emailEnabled });
+    if (url === '/api/auth/config')
+      return json({
+        passwordAuthEnabled: this.passwordAuthEnabled,
+        emailEnabled: this.emailEnabled,
+      });
     if (url === '/api/auth/register' && method === 'POST') {
       // Always the same generic answer, like the real server.
       return json({ status: 'verification_sent' }, 202);

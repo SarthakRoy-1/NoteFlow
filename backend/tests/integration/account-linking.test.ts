@@ -15,6 +15,7 @@ import {
   openTestDb,
   resetDb,
   testEnv,
+  PASSWORD_AUTH_ON,
 } from '../helpers/testApp.js';
 
 const { db, pool } = openTestDb();
@@ -34,7 +35,7 @@ beforeEach(async () => {
   };
   let t = new Date('2026-10-08T10:00:00Z').getTime();
   clock = { now: () => new Date(t), advance: (ms) => (t += ms) };
-  app = buildApp(db, testEnv(), google, { email: new FakeEmail(), now: clock.now });
+  app = buildApp(db, testEnv(PASSWORD_AUTH_ON), google, { email: new FakeEmail(), now: clock.now });
 });
 
 const startLink = (cookie: string, password = PASSWORD, target = app) =>
@@ -97,7 +98,7 @@ describe('starting a link', () => {
 
   it('is rate limited per account', async () => {
     const pat = await owner();
-    const limited = buildApp(db, testEnv(), google, {
+    const limited = buildApp(db, testEnv(PASSWORD_AUTH_ON), google, {
       email: new FakeEmail(),
       now: clock.now,
       authLimiters: {

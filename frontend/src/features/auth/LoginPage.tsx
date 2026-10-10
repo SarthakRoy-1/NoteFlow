@@ -19,7 +19,9 @@ export function LoginPage() {
   const me = useMe();
   const config = useAuthConfig();
   const [mode, setMode] = useState<AuthMode>('signin');
-  const error = loginErrorMessage(params.get('error'));
+  const passwordAuth = config.data?.passwordAuthEnabled === true;
+  // Wait for the config so the message never flashes the wrong wording.
+  const error = config.isPending ? null : loginErrorMessage(params.get('error'), passwordAuth);
 
   if (me.data) return <Navigate to="/" replace />;
 
@@ -44,40 +46,46 @@ export function LoginPage() {
           </p>
         )}
         <div className="auth-panel">
-          <div
-            className="segmented auth-switch"
-            role="radiogroup"
-            aria-label="Sign in or create an account"
-          >
-            {(
-              [
-                ['signin', 'Sign in'],
-                ['register', 'Create account'],
-              ] as const
-            ).map(([value, label]) => (
-              <label key={value}>
-                <input
-                  type="radio"
-                  name="auth-mode"
-                  value={value}
-                  checked={mode === value}
-                  onChange={() => setMode(value)}
-                />
-                <span>{label}</span>
-              </label>
-            ))}
-          </div>
+          {passwordAuth && (
+            <div
+              className="segmented auth-switch"
+              role="radiogroup"
+              aria-label="Sign in or create an account"
+            >
+              {(
+                [
+                  ['signin', 'Sign in'],
+                  ['register', 'Create account'],
+                ] as const
+              ).map(([value, label]) => (
+                <label key={value}>
+                  <input
+                    type="radio"
+                    name="auth-mode"
+                    value={value}
+                    checked={mode === value}
+                    onChange={() => setMode(value)}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          )}
 
           <a className="google-button" href={signInHref}>
             <GoogleG />
             {mode === 'register' ? 'Sign up with Google' : 'Sign in with Google'}
           </a>
 
-          <p className="auth-or">
-            <span>or with email</span>
-          </p>
+          {passwordAuth && (
+            <>
+              <p className="auth-or">
+                <span>or with email</span>
+              </p>
 
-          <EmailAuthForm key={mode} mode={mode} emailEnabled={config.data?.emailEnabled} />
+              <EmailAuthForm key={mode} mode={mode} emailEnabled={config.data?.emailEnabled} />
+            </>
+          )}
         </div>
       </div>
 

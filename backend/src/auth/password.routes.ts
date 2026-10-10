@@ -186,7 +186,7 @@ export function passwordAuthRouter({ env, db, limiters, email: mailer, now }: Pa
 
   /** Lets the UI hide sign-up and recovery instead of showing something that cannot work. */
   router.get('/config', (_req, res) => {
-    res.json({ emailEnabled: mailer.configured });
+    res.json({ passwordAuthEnabled: true, emailEnabled: mailer.configured });
   });
 
   router.post('/register', async (req, res, next) => {

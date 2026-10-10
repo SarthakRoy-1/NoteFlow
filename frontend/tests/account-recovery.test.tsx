@@ -251,7 +251,7 @@ describe('connecting Google from Settings', () => {
     expect(
       await screen.findByText('You sign in with Google. NoteFlow never sees your Google password.'),
     ).toBeInTheDocument();
-    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(await screen.findByText('Connected')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Connect Google' })).not.toBeInTheDocument();
   });
 

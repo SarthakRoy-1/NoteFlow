@@ -72,11 +72,11 @@ balance` on headings. Dates and counts use tabular numerals.
   line. History is a quiet list at the right (below the composer on small screens).
 - **Settings:** label-left / control-right rows divided by hairlines: Account, Time zone, Appearance
   (System / Light / Dark segmented control, saved in `localStorage`).
-- **Login:** two columns: wordmark, a serif statement, a Sign in / Create account switch, the Google button and an email form (name, email, password with show/hide); after sign-up the form becomes a "Check your email" panel with a resend button. Pages reached from email links (confirm email, forgot and reset password) use the same paper column with the wordmark above a serif title, and Settings has a "Sign-in methods" row. Sign-up and recovery are hidden when the server cannot send email. Beside it a worked example of
+- **Login:** (the email form, Sign in / Create account switch and email-link pages below appear only when `ENABLE_PASSWORD_AUTH=true`; by default the page shows just the Google button) two columns: wordmark, a serif statement, a Sign in / Create account switch, the Google button and an email form (name, email, password with show/hide); after sign-up the form becomes a "Check your email" panel with a resend button. Pages reached from email links (confirm email, forgot and reset password) use the same paper column with the wordmark above a serif title, and Settings has a "Sign-in methods" row. Sign-up and recovery are hidden when the server cannot send email. Beside it a worked example of
   how a note becomes a reminder and a todo (illustrative, labelled as an example, hidden from
   assistive tech).
 
-## Motion (Emil Kowalski guidance)
+## Motion
 
 Ease-out `cubic-bezier(0.23, 1, 0.32, 1)`, 140ms for state changes, 260ms for entrances. Press scale
 0.97 on buttons and nav. Hover styles are gated by `(hover: hover)`. One entrance per screen change,

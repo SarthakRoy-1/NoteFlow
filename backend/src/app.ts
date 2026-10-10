@@ -7,6 +7,7 @@ import { authRouter } from './auth/routes.js';
 import { createAIProvider, type AIProvider } from './ai/provider/index.js';
 import { createGoogleAuth, type GoogleAuth } from './auth/google.js';
 import type { Env } from './config/env.js';
+import { notFound } from './lib/errors.js';
 import { createEmailSender, type EmailSender } from './email/index.js';
 import type { Db } from './db/client.js';
 import { AI_CALLS_PER_MINUTE, createRateLimiter } from './lib/rateLimit.js';
@@ -21,6 +22,17 @@ import { meRouter } from './modules/users/me.routes.js';
 import { healthRouter } from './routes/health.js';
 
 const MINUTE = 60_000;
+
+/** Every endpoint that belongs to custom email/password auth (incl. Google linking for those accounts). */
+const DISABLED_PASSWORD_PATHS = [
+  'register',
+  'login',
+  'resend-verification',
+  'verify-email',
+  'forgot-password',
+  'reset-password',
+  'link',
+].map((p) => `/api/auth/${p}`);
 
 /**
  * Per-process limits (see lib/rateLimit.ts). Behind a reverse proxy, set Express's `trust proxy`
@@ -82,25 +94,38 @@ export function createApp({
   // Public routes.
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter({ env, db, getGoogle, now: clock }));
-  app.use(
-    '/api/auth',
-    passwordAuthRouter({
-      env,
-      db,
-      limiters,
-      email: email ?? createEmailSender(env),
-      now: clock,
-    }),
-  );
+  if (env.ENABLE_PASSWORD_AUTH) {
+    app.use(
+      '/api/auth',
+      passwordAuthRouter({
+        env,
+        db,
+        limiters,
+        email: email ?? createEmailSender(env),
+        now: clock,
+      }),
+    );
+  } else {
+    // Custom email/password auth is disabled: same 404 as any unknown endpoint, and nothing runs
+    // (no email sender is built, no token is read, no session is created).
+    app.get('/api/auth/config', (_req, res) => {
+      res.json({ passwordAuthEnabled: false, emailEnabled: false });
+    });
+    app.use(DISABLED_PASSWORD_PATHS, (_req, _res, next) =>
+      next(notFound('That endpoint does not exist.')),
+    );
+  }
 
   // Everything below requires a valid session. Add new feature routers here.
   const protectedApi = Router();
   protectedApi.use(requireAuth(db));
   protectedApi.use('/me', meRouter(db));
-  protectedApi.use(
-    '/auth/link',
-    linkRouter({ env, db, getGoogle, limiter: limiters.link, now: clock }),
-  );
+  if (env.ENABLE_PASSWORD_AUTH) {
+    protectedApi.use(
+      '/auth/link',
+      linkRouter({ env, db, getGoogle, limiter: limiters.link, now: clock }),
+    );
+  }
   const provider = ai ?? createAIProvider(env);
   // One allowance per user for every real AI call (note analysis and Ask AI).
   const limiter = createRateLimiter({

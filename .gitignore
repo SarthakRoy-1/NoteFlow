@@ -20,8 +20,8 @@ Thumbs.db
 .vscode/
 .idea/
 
-# claude local
+# local tool configuration
 .claude/
 
-# graphify generated output
+# generated output
 graphify-out/

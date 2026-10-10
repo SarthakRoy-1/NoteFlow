@@ -152,6 +152,8 @@ This is not initially intended to be:
 
 ### Authentication
 
+> Assignment compliance: only Google OAuth is active by default. The email/password items below are implemented but **disabled** unless `ENABLE_PASSWORD_AUTH=true` (the assignment forbids a custom email/password login). Password-only accounts cannot sign in while it is off; their records are preserved.
+
 - Google OAuth.
 - Email/password registration and sign-in (added by change request; Argon2id, rate limited). A sign-up is only a pending record until the owner opens an emailed one-time link and re-enters the password they chose; it never reserves the address.
 - Password reset by emailed one-time link (ends all sessions). Both need an email provider (Resend or SMTP, e.g. Gmail with an App Password); without one the features are switched off, not faked.

@@ -71,7 +71,7 @@ For this repository, the selected implementation stack is:
 - Vitest for testing.
 - Gemini as the current AI provider behind an `AIProvider` abstraction.
 
-The Gemini choice is an implementation decision, not an assignment requirement.
+The Gemini choice is an implementation decision, not an assignment requirement. A second provider, Groq (`GroqProvider`, `GROQ_API_KEY`, optional `GROQ_MODEL`), implements the same interface; `AI_PROVIDER` selects one and a provider that is chosen but incomplete never falls back to the other.
 
 Preserve the working stack unless there is a technical reason to change it.
 
@@ -270,7 +270,9 @@ An AI failure must not cause an otherwise valid saved note to disappear.
 
 Authentication establishes identity.
 
-Google OAuth is the required authentication mechanism. Email/password sign-in was added later at the project owner's explicit request and exists alongside it.
+Google OAuth is the required authentication mechanism and the only supported sign-in path for the assignment. The assignment says "Do not build your own email and password login", so the email/password implementation (added earlier at the owner's request) is **disabled by default** behind `ENABLE_PASSWORD_AUTH=false`: its routes return 404 and the UI hides it. Password-only accounts cannot sign in while it is off; their records are preserved. Do not enable it in any default configuration.
+
+The rules below apply only when it is deliberately re-enabled.
 
 Passwords are hashed with Argon2id and never stored or logged in plaintext. Never merge a Google account and a password account because their email strings match; connecting them is an explicit, re-authenticated action. An unverified sign-up must never reserve an email address.
 

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { readTheme, saveTheme, type ThemeChoice } from '../../lib/theme';
-import { useMe, useUpdateTimezone } from '../auth/useAuth';
+import { useAuthConfig, useMe, useUpdateTimezone } from '../auth/useAuth';
 import { errorMessage } from '../notes/useNotes';
 import { SignInMethods } from './SignInMethods';
 
@@ -25,8 +25,12 @@ const THEMES: { value: ThemeChoice; label: string }[] = [
   { value: 'dark', label: 'Dark' },
 ];
 
-function signInSummary(me: { signIn: { password: boolean; google: boolean } } | null | undefined) {
+function signInSummary(
+  me: { signIn: { password: boolean; google: boolean } } | null | undefined,
+  passwordAuth: boolean,
+) {
   if (!me) return '';
+  if (!passwordAuth) return 'You sign in with Google. NoteFlow never sees your Google password.';
   if (me.signIn.password && me.signIn.google)
     return 'You can sign in with Google or your password.';
   if (me.signIn.password) return 'You sign in with your email and password.';
@@ -36,6 +40,7 @@ function signInSummary(me: { signIn: { password: boolean; google: boolean } } | 
 export function SettingsPage() {
   const [theme, setTheme] = useState<ThemeChoice>(readTheme);
   const { data: me } = useMe();
+  const passwordAuth = useAuthConfig().data?.passwordAuthEnabled === true;
   const save = useUpdateTimezone();
   const saved = me?.timezone ?? 'UTC';
   const [choice, setChoice] = useState<string | null>(null);
@@ -56,7 +61,7 @@ export function SettingsPage() {
       <div className="settings-row">
         <div className="settings-label">
           <h2>Account</h2>
-          <p className="muted">{signInSummary(me)}</p>
+          <p className="muted">{signInSummary(me, passwordAuth)}</p>
         </div>
         <dl className="settings-account">
           <dt>Name</dt>
@@ -66,7 +71,7 @@ export function SettingsPage() {
         </dl>
       </div>
 
-      {me && <SignInMethods me={me} />}
+      {me && passwordAuth && <SignInMethods me={me} />}
 
       <form className="settings-row settings-card" onSubmit={submit}>
         <div className="settings-label">

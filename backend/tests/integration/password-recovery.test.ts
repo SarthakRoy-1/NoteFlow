@@ -14,6 +14,7 @@ import {
   openTestDb,
   resetDb,
   testEnv,
+  PASSWORD_AUTH_ON,
 } from '../helpers/testApp.js';
 
 const { db, pool } = openTestDb();
@@ -29,7 +30,7 @@ beforeEach(async () => {
   email = new FakeEmail();
   let t = new Date('2026-10-08T10:00:00Z').getTime();
   clock = { now: () => new Date(t), advance: (ms) => (t += ms) };
-  app = buildApp(db, testEnv(), undefined, { email, now: clock.now });
+  app = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, { email, now: clock.now });
 });
 
 const forgot = (address = 'pat@example.com', target = app) =>
@@ -80,7 +81,7 @@ describe('POST /api/auth/forgot-password', () => {
 
   it('is rate limited per IP and per address', async () => {
     await createPasswordUserWithSession(db);
-    const byIp = buildApp(db, testEnv(), undefined, {
+    const byIp = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, {
       email,
       now: clock.now,
       authLimiters: {
@@ -92,7 +93,7 @@ describe('POST /api/auth/forgot-password', () => {
     await forgot('b@example.com', byIp);
     expect((await forgot('c@example.com', byIp)).status).toBe(429);
 
-    const byAddress = buildApp(db, testEnv(), undefined, {
+    const byAddress = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, {
       email,
       now: clock.now,
       authLimiters: {
@@ -211,7 +212,7 @@ describe('POST /api/auth/reset-password', () => {
 
   it('limits attempts per link', async () => {
     await createPasswordUserWithSession(db);
-    const limited = buildApp(db, testEnv(), undefined, {
+    const limited = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, {
       email,
       now: clock.now,
       authLimiters: {

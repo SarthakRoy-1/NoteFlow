@@ -11,6 +11,7 @@ import {
   openTestDb,
   resetDb,
   testEnv,
+  PASSWORD_AUTH_ON,
 } from '../helpers/testApp.js';
 
 const { db, pool } = openTestDb();
@@ -23,7 +24,7 @@ const answer = (text = 'An answer.') => JSON.stringify({ answer: text, answerabl
 function setup(perMinute?: number) {
   const ai = new FakeAI();
   const clock = { at: FIXED_NOW.getTime() };
-  const app = buildApp(db, testEnv(), undefined, {
+  const app = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, {
     ai,
     now: () => new Date(clock.at),
     aiCallsPerMinute: perMinute,

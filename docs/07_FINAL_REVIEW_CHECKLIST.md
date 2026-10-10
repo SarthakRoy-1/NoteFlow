@@ -7,7 +7,8 @@ only after verifying it in the running app or with an automated test.
 
 ### Auth & isolation
 
-- [ ] Google OAuth is the only login; no email/password anywhere
+- [ ] Google OAuth sign-in works; custom email/password auth is disabled by default (`ENABLE_PASSWORD_AUTH=false`) and its routes return 404
+- [ ] (Only if deliberately re-enabled) password reset and Google linking require a verified email and never merge accounts by email alone
 - [ ] Failed/denied login shows a clear message
 - [ ] Logout ends the session server-side
 - [ ] Every `/api` route except `/auth/*` and `/health` returns 401 when signed out

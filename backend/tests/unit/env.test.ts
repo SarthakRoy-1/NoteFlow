@@ -29,6 +29,16 @@ describe('parseEnv', () => {
     );
   });
 
+  it('keeps custom password auth OFF unless ENABLE_PASSWORD_AUTH is exactly true', () => {
+    expect(parseEnv(valid).ENABLE_PASSWORD_AUTH).toBe(false);
+    expect(parseEnv({ ...valid, ENABLE_PASSWORD_AUTH: '' }).ENABLE_PASSWORD_AUTH).toBe(false);
+    expect(parseEnv({ ...valid, ENABLE_PASSWORD_AUTH: 'false' }).ENABLE_PASSWORD_AUTH).toBe(false);
+    expect(parseEnv({ ...valid, ENABLE_PASSWORD_AUTH: 'true' }).ENABLE_PASSWORD_AUTH).toBe(true);
+    expect(() => parseEnv({ ...valid, ENABLE_PASSWORD_AUTH: 'yes' })).toThrow(
+      /ENABLE_PASSWORD_AUTH/,
+    );
+  });
+
   it('rejects an invalid port', () => {
     expect(() => parseEnv({ ...valid, PORT: '70000' })).toThrowError(/PORT/);
   });
@@ -48,6 +58,7 @@ describe('.env.example', () => {
     expect(env.EMAIL_PROVIDER).toBeUndefined();
     expect(env.SMTP_PORT).toBeUndefined();
     expect(env.SMTP_SECURE).toBeUndefined();
+    expect(env.ENABLE_PASSWORD_AUTH).toBe(false); // the shipped example is assignment-compliant
   });
 
   it('still rejects a wrong provider name, a bad port and a bad secure flag', () => {

@@ -54,7 +54,7 @@ The Gemini API key is backend-only and must never be exposed to the browser.
 User
   │
   ▼
-Google OAuth  or  Email + password (Argon2id, email verified by one-time link)
+Google OAuth  (Email + password only when ENABLE_PASSWORD_AUTH=true; off by default)
   │
   ▼
 Authenticated Session
@@ -368,6 +368,8 @@ Application / Domain Logic
 ```
 
 The assignment does not require Gemini specifically. The provider abstraction exists so another provider can be introduced without changing the domain logic.
+
+`GroqProvider` (OpenAI-compatible chat completions, strict JSON-schema output, default model `openai/gpt-oss-120b`) is a second implementation of the same interface. `AI_PROVIDER` (`gemini` or `groq`) selects one; an explicit choice that is incomplete turns AI off and never falls back to the other provider. Both providers' output goes through the same parse, schema and business validation.
 
 ### Testing
 

@@ -15,6 +15,7 @@ import {
   openTestDb,
   resetDb,
   testEnv,
+  PASSWORD_AUTH_ON,
 } from '../helpers/testApp.js';
 
 const { db, pool } = openTestDb();
@@ -29,7 +30,7 @@ beforeEach(async () => {
   email = new FakeEmail();
   let t = new Date('2026-10-08T10:00:00Z').getTime();
   clock = { now: () => new Date(t), advance: (ms) => (t += ms) };
-  app = buildApp(db, testEnv(), undefined, { email, now: clock.now });
+  app = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, { email, now: clock.now });
 });
 
 const signUp = (body: Record<string, unknown> = {}, target = app) =>
@@ -149,7 +150,7 @@ describe('verifying a new sign-up', () => {
   });
 
   it('limits guesses per link, even for the right password afterwards', async () => {
-    const limited = buildApp(db, testEnv(), undefined, {
+    const limited = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, {
       email,
       now: clock.now,
       authLimiters: {
@@ -165,7 +166,7 @@ describe('verifying a new sign-up', () => {
   });
 
   it('limits token submissions per IP', async () => {
-    const limited = buildApp(db, testEnv(), undefined, {
+    const limited = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, {
       email,
       now: clock.now,
       authLimiters: {
@@ -200,7 +201,9 @@ describe('an unverified sign-up cannot be used to take over an address', () => {
       emailVerified: true,
       name: 'Pat G',
     };
-    const agent = request.agent(buildApp(db, testEnv(), google, { email, now: clock.now }));
+    const agent = request.agent(
+      buildApp(db, testEnv(PASSWORD_AUTH_ON), google, { email, now: clock.now }),
+    );
     const start = await agent.get('/api/auth/google');
     const state = new URL(String(start.headers.location)).searchParams.get('state');
     const res = await agent.get(`/api/auth/google/callback?code=c&state=${state}`);
@@ -297,7 +300,7 @@ describe('resending the verification email', () => {
   });
 
   it('is rate limited per address', async () => {
-    const limited = buildApp(db, testEnv(), undefined, {
+    const limited = buildApp(db, testEnv(PASSWORD_AUTH_ON), undefined, {
       email,
       now: clock.now,
       authLimiters: {

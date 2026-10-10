@@ -27,6 +27,15 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: optionalString,
   GOOGLE_CLIENT_SECRET: optionalString,
   GOOGLE_REDIRECT_URI: optionalString,
+  // Assignment compliance: custom email/password auth is OFF unless explicitly enabled. Only the
+  // exact string `true` turns it on; anything else (including unset) leaves it off.
+  ENABLE_PASSWORD_AUTH: z.preprocess(
+    blankToUndefined,
+    z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+  ),
   // Transactional email. EMAIL_PROVIDER picks the sender; when unset it is `resend` if
   // RESEND_API_KEY is present. Without a complete provider (see createEmailSender), sign-up by
   // email and password recovery are switched off rather than faked.

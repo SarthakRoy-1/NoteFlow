@@ -4,6 +4,7 @@ import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { VerifyEmailPage } from '../features/auth/VerifyEmailPage';
+import { PasswordAuthOnly } from '../features/auth/PasswordAuthOnly';
 import { RequireAuth } from '../features/auth/RequireAuth';
 import { NewNote } from '../features/notes/NewNote';
 import { NoteDetailRoute } from '../features/notes/NoteDetail';
@@ -17,9 +18,30 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/verify-email" element={<VerifyEmailPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route
+        path="/verify-email"
+        element={
+          <PasswordAuthOnly>
+            <VerifyEmailPage />
+          </PasswordAuthOnly>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PasswordAuthOnly>
+            <ForgotPasswordPage />
+          </PasswordAuthOnly>
+        }
+      />
+      <Route
+        path="/reset-password"
+        element={
+          <PasswordAuthOnly>
+            <ResetPasswordPage />
+          </PasswordAuthOnly>
+        }
+      />
       <Route
         element={
           <RequireAuth>

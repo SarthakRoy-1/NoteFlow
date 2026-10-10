@@ -17,6 +17,8 @@ import { FakeAI } from './fakeAi.js';
 
 export { FakeAI };
 export const PASSWORD = 'a long enough password';
+/** Opt-in for the (default-off) custom email/password routes; only suites that test them use it. */
+export const PASSWORD_AUTH_ON = { ENABLE_PASSWORD_AUTH: 'true' } as const;
 /** Fixed clock for every AI/date test: Thursday 8 Oct 2026, 10:00 UTC. */
 export const FIXED_NOW = new Date('2026-10-08T10:00:00Z');
 

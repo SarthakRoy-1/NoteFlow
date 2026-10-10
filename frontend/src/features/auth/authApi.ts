@@ -46,7 +46,8 @@ export const registerWithPassword = (registration: Registration) =>
     body: JSON.stringify(registration),
   });
 
-export const fetchAuthConfig = () => api<{ emailEnabled: boolean }>('/auth/config');
+export const fetchAuthConfig = () =>
+  api<{ passwordAuthEnabled: boolean; emailEnabled: boolean }>('/auth/config');
 
 export const resendVerification = (email: string) =>
   api<{ status: string }>('/auth/resend-verification', {

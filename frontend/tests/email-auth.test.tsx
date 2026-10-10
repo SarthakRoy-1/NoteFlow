@@ -33,7 +33,7 @@ describe('login screen: choosing how to sign in', () => {
     signedOut();
     renderAt('/login');
     expect(await screen.findByRole('link', { name: /sign in with google/i })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Sign in' })).toBeChecked();
+    expect(await screen.findByRole('radio', { name: 'Sign in' })).toBeChecked();
     expect(screen.getByRole('radio', { name: 'Create account' })).not.toBeChecked();
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
