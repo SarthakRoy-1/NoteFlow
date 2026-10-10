@@ -99,7 +99,7 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
   Pipeline: provider -> JSON parse -> Zod -> business rules (evidence must be quoted from the note,
   person must be named in the note, dates resolved in user tz or dropped, <=20 items) -> fingerprint
   reconcile into todos/reminders in one transaction. No UI for todos/reminders yet.
-- Env schema now reads GEMINI_API_KEY/GEMINI_MODEL (ANTHROPIC_* removed). Migration 0001 adds
+- Env schema now reads GEMINI_API_KEY/GEMINI_MODEL (the earlier provider variables were removed). Migration 0001 adds
   reminders.due_has_time (date-only reminders). Removed implicit $onUpdate on updated_at.
 - Notes UI: AI analysis panel (counts / failure message / Retry analysis). POST /api/notes/:id/analyze.
 - Phase 4 Todos: GET /api/todos (?status=open|done|all; open first, due asc, undated last; each row has
@@ -140,7 +140,7 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
   AI (ai/ask/{schema,prompt,answerer}.ts, via AIProvider): reply must be {answer<=4000, answerable:boolean};
   parse (fence stripped) -> Zod; extra keys (e.g. invented source ids) are dropped. Notes and question are
   delimited by random per-request markers and declared UNTRUSTED in the system prompt.
-  Sources are the notes the BACKEND retrieved, never model/client ids. No matching note -> deterministic
+  Sources are the notes the BACKEND retrieved, never model/client ids; the model only returns `used_notes` (1-based positions in the numbered list it was given), which are mapped onto our own list (out-of-range/repeated ignored; none valid -> all retrieved notes). `used_notes` is covered by mocks only, never tried against real Gemini. No matching note -> deterministic
   "not enough information" (status no_info, no AI call, saved). Model says answerable=false -> status no_info
   and NO sources saved/shown. Provider/validation failure -> mapped 429/502/503/504/422 with a safe message,
   NOTHING saved (status 'failed' exists in the enum but is intentionally unused).
@@ -179,7 +179,7 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
   link badge/banner depend on the 30s poll if the timer is throttled in a background tab; a date-only
   reminder alerts from the start of its day; manual due edits use the account timezone (no picker yet).
 - Post-Phase-6 hardening (from the Ponytail review/audit; uncommitted until reviewed):
-  (1) Per-user AI rate limit, lib/rateLimit.ts: sliding window, 10 real AI calls per user per minute,
+  (1) Per-user AI rate limit, lib/rateLimit.ts: sliding window, 4 real AI calls per user per minute (was 10; lowered to fit the Gemini free tier's 5 RPM),
   one shared allowance for note analysis and Ask AI, checked just before the provider is called (an Ask
   with no matching note costs nothing and is not counted). Ask over the limit -> 429 AI_RATE_LIMITED, no
   AI call. Saving/editing a note still succeeds; its analysis is marked failed with a "retry shortly"
@@ -189,7 +189,7 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
   transaction and saves only those sources, so deleting a note while the AI works no longer causes a 500.
   (3) GeminiProvider default timeout 20s -> 12s (worst case ~25s with the one 5xx retry, under typical
   30s proxy limits). (4) Retrieval ranks with ts_rank_cd(..., 1) (length normalization) so long notes do
-  not win by length alone. (5) Stale docs/comments about Gemini/Anthropic corrected.
+  not win by length alone. (5) Stale docs/comments about earlier provider choices corrected.
   Deferred on purpose: ask history retention, 500-item list cap/pagination, session cleanup for other
   users, Todo/Reminder component dedup, vector search/embeddings/synonyms, a shared rate limiter.
 - Phase 7 date/time audit (verified by tests that assert stored UTC instants; no Gemini used):
@@ -209,13 +209,13 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
   ResolvedDue type. Limitations: no timezone picker (a user whose first sign-in had no valid browser tz stays on
   UTC until PATCH /me is used); a time inside the DST gap is stored as the shifted time and shown that way; the
   second occurrence of a fall-back hour displays the same HH:mm as the first and re-saving it picks the first.
-- Frontend visual polish (impeccable + Emil Kowalski principles; CSS only, no markup/behaviour change):
+- Frontend visual polish (CSS only, no markup/behaviour change):
   todo/reminder rows are content-first with quiet inline actions (stacked on phones, 40px targets);
   `--color-on-accent` fixes low-contrast text on the pale dark-theme primary/danger fills; buttons got
   hover (pointer devices only) and a 0.97 press state; native controls/selection follow the theme
   (`color-scheme`, `accent-color`, `::selection`); tabular numerals on dates/counts; the due-alert banner
   eases in (respects prefers-reduced-motion). Checked in a real browser at desktop dark, mobile light.
-  Not done: PRODUCT.md (impeccable init) and the `taste` skill (needs a reference site URL).
+  Not done: a separate product-context document and a reference-site analysis.
 - Frontend completion batch (no Gemini; real backend + scripted AI only for browser checks):
   (1) Session expiry: a 401 from any query/mutation while signed in clears cached private data and sends the
   user to /login?error=session_expired with a clear message (RequireAuth). Checked against the real backend by
@@ -223,7 +223,7 @@ Saving a note now stores it, then runs AI extraction; notes.analysis_status is p
   create/edit/retry/delete now refresh the todo and reminder caches. (3) /settings: account time zone
   (PATCH /me), linked from the account name in the header; a "use this device's zone" shortcut; saving
   re-renders every date. Intl lists Asia/Calcutta (not Asia/Kolkata); both are valid for the backend.
-  (4) Login page styled and explained. Taste skill reference analysis still pending (needs a reference URL).
+  (4) Login page styled and explained. Reference-site analysis still pending (needs a reference URL).
 - Phase 6 limitations: retrieval is keyword-based (stemming, no synonyms/typo tolerance, title not weighted);
   a question whose words appear in no note gets "not enough information" even if a paraphrase exists; only
   the top 5 notes (4,000 chars each) are considered; history is capped at 50 entries and cannot be deleted;
@@ -382,6 +382,8 @@ Optional bonus work should only begin after all mandatory core and "Should have"
 
 ## Email/password authentication, verification, linking and recovery
 
+- **Phase 1 (assignment compliance): this whole feature is DISABLED by default** via `ENABLE_PASSWORD_AUTH` (`config/env.ts`, default `false`, only the exact string `true` enables it). When off, `app.ts` does not mount `passwordAuthRouter` or `linkRouter`, answers register/login/resend-verification/verify-email/forgot-password/reset-password/link/* with the standard 404 envelope (no email sender built, no DB access), and the Google callback ignores stored link attempts. `GET /api/auth/config` always exists and returns `{ passwordAuthEnabled, emailEnabled }`; the frontend hides the email form, the three token pages (redirect to `/login`) and the Settings sign-in-methods panel from it. Code, migrations and data are untouched, so setting the flag to `true` restores the behaviour described below.
+
 - Auth routes: `backend/src/auth/password.routes.ts` (register, resend-verification, verify-email, login, forgot-password, reset-password, GET /config), `auth/link.routes.ts` (Connect Google), shared token/DB helpers in `auth/accountTokens.ts`, hashing in `auth/password.ts` (Argon2id, 19 MiB / 2 passes / 1 lane, NFKC). Email: `backend/src/email/` (`EmailSender`; Resend over fetch, or SMTP via nodemailer for Gmail App Passwords; unconfigured sender throws `not_configured`). Env: `EMAIL_PROVIDER=smtp` + `SMTP_HOST/PORT/SECURE/USER/PASS` + `EMAIL_FROM`, or `RESEND_API_KEY` + `EMAIL_FROM`. An explicit `EMAIL_PROVIDER` with missing variables keeps email off and logs a startup warning naming the missing variables (never values); no provider means email features are off. SMTP errors are reduced to a kind, never logged or forwarded.
 - **Sign-up never creates an account until verified.** `POST /register` stores a `pending_registrations` row (email, name, Argon2id hash, token hash, 24 h expiry) and emails a link `…/verify-email#token=…` (token in the fragment so it is never sent to servers or Referer). The pending row is not an account, cannot sign in, and does not reserve the address, so it can never block the real owner's Google sign-in. Latest sign-up for an address replaces the earlier one. Responses are identical for new and already-registered addresses (an existing owner gets an "already have an account" email instead).
 - `POST /verify-email` needs the token AND the password chosen at sign-up (so an attacker who overwrites a victim's pending record cannot get the victim to complete it). The pending row is deleted and the user inserted in one transaction (single use, race-safe); the user is created with `email_verified_at`. Per-token and per-IP attempt limits apply.
@@ -391,3 +393,29 @@ Optional bonus work should only begin after all mandatory core and "Should have"
 - Migrations: `0002_email_password_auth` (nullable `google_sub`, `password_hash`, auth-method check, `lower(email)` unique) and `0003_email_verification_linking_recovery` (`users.email_verified_at`, `pending_registrations`, `user_tokens`, `oauth_link_attempts`; backfills `email_verified_at` for accounts with a Google identity). Both additive. Rollback is manual SQL (drop the new tables/column; restore `google_sub NOT NULL` only if no password-only users exist).
 - Rate limits are per process: sign-up/resend 5/h/IP, 3 emails/h/address, login 20/15 min/IP and 8/15 min/email, forgot 5/h/IP, token submissions 20/15 min/IP and 5/15 min/token, link start 5/15 min/user.
 - Limitations: real email delivery and real Google linking have not been exercised (fake providers in tests); no CAPTCHA or breached-password check; Google-only accounts cannot add a password; pre-0003 password accounts that were never verified still hold their email until verified or reset.
+
+## Stabilization run (9 Oct 2026)
+
+- Fixed: blank `EMAIL_PROVIDER`, `SMTP_PORT`, `SMTP_SECURE`, `PORT`, `APP_BASE_URL` and `SESSION_TTL_DAYS` (exactly what `.env.example` ships) crashed startup; blank now means "not set" (`config/env.ts`, tested against the real `.env.example`).
+- Live browser QA on an isolated `noteflow_test` database with Gemini and email switched off (throwaway users, never the dev DB): sign in by password form, notes create/edit/validation/reload/isolation, AI-failure message with the saved note and existing todo/reminders intact, todos done/undone/edit/delete/source link, reminders alert/acknowledge/re-open/edit/delete/no-time-no-alert, IST display, cross-user 404 on read/patch/delete/analyze, logout and 401 on every protected route.
+- Not verified live: real Gemini extraction and Ask AI (quota), Google linking from Settings, responsive layouts on a device, hosted deployment.
+- Real email sign-up verification and password reset over Gmail SMTP were exercised by the owner (database showed verified users and a consumed reset token).
+
+## Groq provider (added after the stabilization run)
+
+- `backend/src/ai/provider/groq.ts` (`GroqProvider`, OpenAI-compatible `chat/completions`, strict `json_schema` response format, `reasoning_effort: low`, `include_reasoning: false`, key in the Authorization header only). `toStrictSchema` adapts our schemas (all properties required, `additionalProperties: false`); the extraction schema was already strict. Errors map to the same `AIProviderError` kinds (429 daily vs per-minute from `x-ratelimit-remaining-requests` and the body; 400 -> `bad_response`; 401/403/404 -> `not_configured`); retries only for 5xx/network, once.
+- Selection (`createAIProvider`): `AI_PROVIDER` = `gemini` | `groq`; blank = Gemini if configured, else Groq if configured. A chosen but incomplete provider leaves AI off and never falls back to the other one.
+- Automated tests use mocked network only (`tests/unit/groq-provider.test.ts`). Live checks, each exactly one request on the isolated `noteflow_test` database with Gemini off: one note extraction (valid, saved the expected todo) and one Ask AI question (HTTP 200, grounded answer, `used_notes` mapped to the correct source, history and source row saved). Reminder extraction and relative dates ("tomorrow") have not been tried live.
+
+## Final release audit (9 Oct 2026)
+
+- Original assignment found at `Downloads/AI Developer Intern - Assignment .md` (not in the repo). **Core item 1 says: "Do not build your own email and password login."** The app ships email/password sign-up, sign-in, verification, recovery and Google linking, added by owner change request. **Resolved in Phase 1:** they are disabled by default (`ENABLE_PASSWORD_AUTH=false`); nothing was removed, and password-only accounts cannot sign in while it is off.
+- The assignment does **not** require manual creation of todos or reminders (todos/reminders come from notes; the user ticks, edits, deletes).
+- `npm run check` passed: 789 backend tests, 238 frontend tests, typecheck, lint, Prettier, both builds. `npm audit`: 0 vulnerabilities (production and dev).
+- Secret scan: none of the current `.env` secret values appears in any of the 13 commits or in tracked files; `.env` was never committed.
+- Security review found no P0/P1. Open P2: no `trust proxy` setting (per-IP limits would be shared behind a proxy), limits are per process. Fixed P3: missing favicon (a 404 on every page load), two stale comments in `app.ts`. Docs: README now has deployment notes and known limitations; Architecture.md and Agents.md mention Groq.
+- The dev backend (port 3001, `noteflow` database) was started before `AI_PROVIDER=groq` was saved. `tsx watch` restarted it at 22:23 IST after a source edit, so it now loads the Groq configuration (confirmed by selecting the provider from the real `.env`; no model call). Saving a real note now sends it to Groq.
+
+## Deployment configuration (not yet deployed)
+
+- `render.yaml` (API + PostgreSQL, single instance, migrations run in the start command, health check `/api/health`) and `vercel.json` (static frontend, `/api` rewrite to the Render host, SPA fallback). The Render host in `vercel.json` is a placeholder until the API exists. Verified locally only: production start, migrations, health, Secure cookie, origin check, password routes 404. A real Google round trip and live hosting are unverified.

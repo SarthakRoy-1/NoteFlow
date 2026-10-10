@@ -1,16 +1,17 @@
 # NoteFlow
 
 AI notes, todos and reminders. Write notes in plain language; an AI model extracts todos and
-reminders, and you can ask questions about your notes. Sign in with Google or with an email and password.
+reminders, and you can ask questions about your notes. Sign in with Google. (Custom email/password sign-in exists in the code but is disabled by default; see `ENABLE_PASSWORD_AUTH`.)
 
-**Status:** Phases 0-6 done (foundation, auth, notes CRUD, AI intent extraction, todos, reminders, Ask AI). Phase 3's
-live Gemini check is still pending (see `Memory.md`). The rest arrives in later phases (see `Phases.md`; progress in
-`Memory.md`).
+**Status:** every Core and Should-have item of the assignment is implemented (Google sign-in, notes CRUD, AI
+extraction, todos, reminders with in-app alerts, Ask AI with history, time zones, no duplicates, AI labels).
+Automated: `npm run check` passes (typecheck, lint, format, backend + frontend tests, production builds).
+Verified by hand on a local machine only: see "Known limitations" at the end. Progress notes are in `Memory.md`.
 
 ## Stack
 
 React + Vite + TypeScript · Node + Express + TypeScript · PostgreSQL + Drizzle · Zod · Luxon ·
-Google Gemini (behind an `AIProvider` interface) · Vitest.
+Groq (`openai/gpt-oss-120b`) or Google Gemini, behind an `AIProvider` interface · Vitest.
 
 ## Prerequisites
 
@@ -37,10 +38,14 @@ cp .env.example .env     # then fill in the values (see below)
 | `DATABASE_URL`                          | Dev database, e.g. `postgres://noteflow:<password>@localhost:5432/noteflow` |
 | `TEST_DATABASE_URL`                     | **Separate** test database; the name must end in `_test`             |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | Google OAuth client (see below) |
+| `ENABLE_PASSWORD_AUTH` | `false` by default. The assignment requires Google OAuth and forbids a custom email/password login, so register, login, email verification, password reset and Google linking return 404 and the UI hides them. Set `true` only to deliberately re-enable that implementation. Nothing is deleted when it is off |
+| (note) | Password-only accounts cannot sign in while `ENABLE_PASSWORD_AUTH` is off; their records are kept and work again if it is set to `true`. Google OAuth is the supported sign-in path |
 | `EMAIL_PROVIDER` (`smtp` or `resend`), `EMAIL_FROM` | Which sender delivers verification and reset mail. Without a complete provider those features are switched off in the UI and the API returns 503 (Google sign-in is unaffected). An explicit provider with missing variables leaves email off and logs a warning naming the missing variables (never values) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | SMTP sender. Gmail: `smtp.gmail.com`, `465`, `true`, your Gmail address, and a Google [App Password](https://myaccount.google.com/apppasswords) (needs 2-Step Verification). No domain required |
 | `RESEND_API_KEY` | Resend sender (needs a domain-verified `EMAIL_FROM`) |
 | `GEMINI_API_KEY` / `GEMINI_MODEL`       | Gemini API key and model name (backend-only; the model is never hardcoded). If either is missing the app still runs and shows "AI analysis is not set up" on saved notes |
+| `AI_PROVIDER` (`gemini` or `groq`)      | Which AI provider answers. Blank = Gemini if configured, otherwise Groq if configured. A chosen provider that is incomplete turns AI off; it never falls back to the other one |
+| `GROQ_API_KEY` / `GROQ_MODEL`           | Groq API key (backend-only) and an optional model override (default `openai/gpt-oss-120b`). Uses Groq's OpenAI-compatible chat API with strict JSON-schema output; the reply is still validated by the backend |
 
 Generate secrets:
 
@@ -160,10 +165,11 @@ Ask a question about your own notes on the **Ask AI** page. The server (never th
 picks the notes: it searches **only your notes** with the existing PostgreSQL full-text index, ranks
 them (more matching question words first, then most recently edited), and sends at most **5** notes
 (each cut to 4,000 characters) with your question to the AI. The answer is validated (`{ answer,
-answerable }`), then saved with the exact notes that were retrieved as its sources. If no note
+answerable, used_notes }`), then saved with its sources: the retrieved notes the AI says it used
+(positions mapped onto our own list; every retrieved note if it names none that are valid). If no note
 matches, the answer is "not enough information" and the AI is not called. If the AI says the notes
 are not enough, no source is shown. If the AI fails or returns unusable output, you get a clear error
-and **nothing is saved**. Each user may make 10 AI calls a minute (note analysis and Ask AI share it); beyond that Ask AI answers 429 and a saved note simply skips analysis until you retry (per-process limit, single server). Notes and questions are treated as untrusted data (delimited by a random
+and **nothing is saved**. Each user may make 4 AI calls a minute (kept under the Gemini free tier's 5 requests a minute) (note analysis and Ask AI share it); beyond that Ask AI answers 429 and a saved note simply skips analysis until you retry (per-process limit, single server). Notes and questions are treated as untrusted data (delimited by a random
 per-request marker and declared as data in the system prompt). History (last 50, newest first) is
 read-only and private to you; a deleted source note keeps its saved title and is no longer a link.
 
@@ -205,3 +211,37 @@ backend/    Express API (src/, tests/, drizzle/ migrations)
 frontend/   React app (src/, tests/)
 docs/       Contracts and review checklist
 ```
+
+## Deployment (Vercel frontend + Render API + Render PostgreSQL)
+
+Configuration lives in `render.yaml` (API and database) and `vercel.json` (static frontend plus an `/api` rewrite).
+This has been verified locally (production build, `NODE_ENV=production` start, migrations, health check, Secure
+cookie, origin check) but not yet on the hosted services.
+
+1. **Render:** create a Blueprint from this repository. It creates one PostgreSQL database and one API instance
+   (`npm ci --include=dev && npm run build -w backend`; start `node backend/dist/db/migrate.js && node backend/dist/server.js`;
+   health check `/api/health`). `SESSION_SECRET` is generated, `DATABASE_URL` comes from the database's internal
+   connection string (no extra SSL setup), `AI_PROVIDER=groq`. Enter these in the dashboard (names only):
+   `APP_BASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GROQ_API_KEY`
+   (optional `GROQ_MODEL`). Leave `ENABLE_PASSWORD_AUTH` unset.
+2. **Vercel:** import the repository with the repository root as the project root. Replace
+   `REPLACE-WITH-RENDER-HOST.onrender.com` in `vercel.json` with the real Render host and redeploy. The rewrite
+   keeps the browser on one origin, which is required: the session cookie is `SameSite=Lax`, `HttpOnly`, `Secure` in
+   production, and there is no CORS layer.
+3. **Google Cloud:** set `APP_BASE_URL` to the Vercel https origin and `GOOGLE_REDIRECT_URI` to
+   `<that origin>/api/auth/google/callback`; add exactly that redirect URI to the OAuth client. `APP_BASE_URL` is
+   also the only origin the CSRF check accepts. While the consent screen is in "Testing", add reviewers as test users.
+4. **Proxies:** `trust proxy` is not set. Only the (disabled) email/password routes use the client IP, so this does
+   not affect the default configuration. If you re-enable them, set it for the real hop count first.
+5. **Process-local state:** rate limits are in memory, so keep `numInstances: 1`. Sessions are in PostgreSQL.
+6. Migrations are additive with no down-migration. Back up the database before applying them to anything that matters.
+   Free Render databases and web services have limits (expiry, idle sleep); use paid plans for anything lasting.
+
+## Known limitations
+
+- Real-device mobile browsers, a deployed host, and Google account linking from Settings have not been tested.
+- AI calls are made while the request waits (note save and Ask AI), with a limit per attempt (12 s Gemini, 20 s Groq) and at most one retry, only on a server or network error.
+- Ask AI retrieval is keyword based (PostgreSQL full text), not semantic.
+- Not built (bonus items): "needs a time" state, recurring reminders, notifying another user, Docker deliverable.
+- A reminder with no time is shown as "No time set" and never alerts.
+- Live AI checks so far: one extraction and one Ask AI request against Groq on an isolated test database.

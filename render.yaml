@@ -1,0 +1,43 @@
+# Render Blueprint: one API instance and one PostgreSQL database.
+# Secrets are never stored here; `sync: false` values are entered in the Render dashboard.
+databases:
+  - name: noteflow-db
+    plan: free # free databases expire after a while; choose a paid plan for anything lasting
+    databaseName: noteflow
+    user: noteflow
+
+services:
+  - type: web
+    name: noteflow-api
+    runtime: node
+    plan: free # free instances sleep when idle; the first request after a pause is slow
+    numInstances: 1 # rate limits are per process, so keep a single instance
+    # `--include=dev` because TypeScript is a dev dependency and Render sets NODE_ENV=production for builds.
+    buildCommand: npm ci --include=dev && npm run build -w backend
+    # Migrations are additive and idempotent; they run before the API starts.
+    startCommand: node backend/dist/db/migrate.js && node backend/dist/server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: '22'
+      - key: DATABASE_URL
+        fromDatabase: # internal connection string: same region, no public SSL setup needed
+          name: noteflow-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: APP_BASE_URL # the public Vercel origin, e.g. https://<project>.vercel.app
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI # <APP_BASE_URL>/api/auth/google/callback
+        sync: false
+      - key: AI_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false
+      # GROQ_MODEL is optional. ENABLE_PASSWORD_AUTH is deliberately not set (off by default).
