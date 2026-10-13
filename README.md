@@ -8,6 +8,19 @@ reminders inside them, and you can ask questions about your own notes. Sign in w
 - **Public pages:** [`/privacy`](https://noteflow-olive.vercel.app/privacy) and
   [`/terms`](https://noteflow-olive.vercel.app/terms) (see [Privacy, security and limitations](#15-privacy-security-and-limitations))
 
+## Product demo
+
+[![NoteFlow tour: a note becomes a dated reminder and a todo](frontend/public/tour/noteflow-tour.jpg)](https://noteflow-olive.vercel.app/tour/noteflow-tour.mp4)
+
+A 23-second tour with voiceover and captions. A note written in plain language becomes a dated
+reminder and a todo; when the note gives no time, NoteFlow asks instead of guessing; and Ask AI
+answers a question from your own notes, with its sources. The notes in it are invented examples.
+Click the image to play it, or open the
+[dark-theme](https://noteflow-olive.vercel.app/tour/noteflow-tour-dark.mp4) or
+[portrait](https://noteflow-olive.vercel.app/tour/noteflow-tour-vertical.mp4) version. The same
+files are in [`frontend/public/tour/`](frontend/public/tour/), and the tour plays on the live
+sign-in page.
+
 > **Reading this README.** Each feature below is marked **Implemented**, **Optional** (needs
 > configuration), **External** (depends on a third-party account or setting) or **Unverified**
 > (code and automated tests exist, but it has not been proven against the real service). Nothing in
@@ -236,12 +249,19 @@ server), taken during release preparation. No mock-ups.
 
 ![Sign-in page](docs/screenshots/01-login.png)
 
-**Sign-in (desktop).** Google sign-in, the "Remember me on this device" option, a worked example of
-what NoteFlow finds in a note, and links to the Privacy Policy and Terms.
+**Sign-in (desktop).** Google sign-in, the "Remember me on this device" option and links to the
+Privacy Policy and Terms. On the right, a still of a note and what NoteFlow finds in it; pressing
+"Watch the 23-second tour" plays the [product demo](#product-demo) in the same frame.
+
+![Sign-in page in the dark theme](docs/screenshots/03-login-dark.png)
+
+**Sign-in (dark theme).** The page follows the theme setting (or the system theme), and so does the
+tour: a dark render of the same video, not a filtered copy.
 
 ![Sign-in page on a phone](docs/screenshots/02-login-mobile.png)
 
-**Sign-in (narrow / phone width).** The same page at 390 px wide: one column, no horizontal scroll.
+**Sign-in (narrow / phone width).** The same page at 390 px wide: one column, no horizontal scroll;
+the demonstration moves under the sign-in button and uses the portrait version of the tour.
 
 ### Privacy Policy and Terms of Service
 

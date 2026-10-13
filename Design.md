@@ -10,8 +10,8 @@ recedes, and the only colour that carries meaning is used for exactly one meanin
 
 - **Paper** surfaces, **ink** text, **hairline** rules instead of cards.
 - **Pen green**: actions, links, focus, active state.
-- **Marker yellow**: anything the AI made (the "AI" mark, "AI-created", highlighted phrases on the
-  login example). Never used for status.
+- **Marker yellow**: anything the AI made (the "AI" mark, "AI-created", highlighted phrases in the
+  login tour). Never used for status.
 - **Brick red**: overdue, due now, errors, destructive actions. Nothing else.
 
 Avoid: indigo/purple actions, rounded cards around everything, pill badges, dashed empty states,
@@ -26,7 +26,7 @@ setting only sets `color-scheme` (`data-theme="light|dark"` on `<html>`, absent 
 | ---------------------------------- | --------- | --------------------------------------- |
 | `--paper`                          | `#fbf8f2` | Page and editor surface                 |
 | `--paper-sunk`                     | `#f4efe4` | Sidebar, note list, hover/selected rows |
-| `--paper-raised`                   | `#fffdf9` | Inputs, login example note              |
+| `--paper-raised`                   | `#fffdf9` | Inputs, the login tour's play control   |
 | `--ink` / `--ink-2` / `--ink-3`    | `#211d18` 15.8:1, `#5a5246` 7.3:1, `#6f6659` 5.3:1 (4.9:1 on sunk) | Text, secondary, metadata |
 | `--rule` / `--rule-strong`         | `#e6dece` / `#d3c8b2` | Hairlines, control borders |
 | `--pen`, `--pen-hover`, `--on-pen` | `#2d5a4a`  | Primary action                          |
@@ -72,15 +72,31 @@ balance` on headings. Dates and counts use tabular numerals.
   line. History is a quiet list at the right (below the composer on small screens).
 - **Settings:** label-left / control-right rows divided by hairlines: Account, Time zone, Appearance
   (System / Light / Dark segmented control, saved in `localStorage`).
-- **Login:** (the email form, Sign in / Create account switch and email-link pages below appear only when `ENABLE_PASSWORD_AUTH=true`; by default the page shows just the Google button) two columns: wordmark, a serif statement, a Sign in / Create account switch, the Google button and an email form (name, email, password with show/hide); after sign-up the form becomes a "Check your email" panel with a resend button. Pages reached from email links (confirm email, forgot and reset password) use the same paper column with the wordmark above a serif title, and Settings has a "Sign-in methods" row. Sign-up and recovery are hidden when the server cannot send email. Beside it a worked example of
-  how a note becomes a reminder and a todo (illustrative, labelled as an example, hidden from
-  assistive tech).
+- **Login:** two panels that share one vertical axis (same top and bottom padding, content centred).
+  Left: the wordmark pinned top-left, a serif headline ("Write notes the way you think."), one line of
+  support, the tagline, then the single primary action (Google, pen fill, the "G" on a white tile),
+  "Remember me" with its hint (two lines reserved so nothing shifts) and the consent sentence. Right
+  (`--paper-sunk`, slightly wider, tighter padding): one framed object at about 88% of the panel
+  width, 16:9 (9:16 at <=720px): a still of a note and what NoteFlow finds in it, which is also the
+  first frame of the 23-second tour. The play control sits on the still's empty paper, right-aligned
+  with the extracted items, ink not pen so it never competes with sign-in. Pressing it swaps the
+  still for the video in the same frame (portrait file on phones) with controls and captions; "Hide
+  the tour", overlaid top-right, swaps back. The tour and its stills exist in both themes (dark is a
+  re-render with the dark tokens, not a filter); the active theme picks one, and a theme change
+  mid-tour resumes the other render at the same moment. The MP4 is requested only on that press and never autoplays
+  on load. Below 900px the demonstration moves under the copy. The email form (name, email,
+  password with show/hide), Sign in / Create account switch and email-link pages appear only when
+  `ENABLE_PASSWORD_AUTH=true`; after sign-up the form becomes a "Check your email" panel with a resend
+  button, and pages reached from email links (confirm email, forgot and reset password) use the same
+  paper column with the wordmark above a serif title. Settings has a "Sign-in methods" row. Sign-up
+  and recovery are hidden when the server cannot send email. The demonstration is illustrative
+  (an invented note), not account data.
 
 ## Motion
 
 Ease-out `cubic-bezier(0.23, 1, 0.32, 1)`, 140ms for state changes, 260ms for entrances. Press scale
 0.97 on buttons and nav. Hover styles are gated by `(hover: hover)`. One entrance per screen change,
-the reminder band drops in, and the login example's highlights sweep once. `prefers-reduced-motion`
+the reminder band drops in. `prefers-reduced-motion`
 collapses all of it.
 
 ## Accessibility

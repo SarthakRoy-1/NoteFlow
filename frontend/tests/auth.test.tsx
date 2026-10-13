@@ -35,6 +35,75 @@ describe('auth UI', () => {
     expect(link.getAttribute('href')).toMatch(/^\/api\/auth\/google\?tz=/);
   });
 
+  it('leads with the headline and one primary sign-in action', async () => {
+    const api = new FakeApi();
+    api.signedIn = false;
+    renderAt('/login');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Write notes the way you think.' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /sign in with google/i })).toBeInTheDocument();
+  });
+
+  it('shows the demonstration as a still and plays the tour in place only when pressed', async () => {
+    const api = new FakeApi();
+    api.signedIn = false;
+    const { container } = renderAt('/login');
+    await screen.findByRole('link', { name: /sign in with google/i });
+
+    // Resting: a poster (portrait one for narrow screens), no video element, no MP4.
+    expect(container.querySelector('video')).toBeNull();
+    expect(container.querySelector('.tour-stage source')?.getAttribute('srcset')).toBe(
+      '/tour/noteflow-tour-vertical.jpg',
+    );
+    expect(container.querySelector('.tour-stage img')?.getAttribute('src')).toBe(
+      '/tour/noteflow-tour.jpg',
+    );
+    const open = screen.getByRole('button', { name: /watch the 23-second tour/i });
+    expect(open).toHaveAccessibleDescription(/remind priya to share the q4 roadmap/i);
+
+    await userEvent.click(open);
+    const video = container.querySelector('video');
+    expect(video).toHaveAttribute('controls');
+    expect(video?.getAttribute('src')).toBe('/tour/noteflow-tour.mp4');
+    expect(video?.querySelector('track[kind="captions"]')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /hide the tour/i }));
+    expect(container.querySelector('video')).toBeNull();
+    expect(screen.getByRole('button', { name: /watch the 23-second tour/i })).toHaveFocus();
+  });
+
+  it('uses the dark render in the dark theme and follows a theme change while open', async () => {
+    const api = new FakeApi();
+    api.signedIn = false;
+    document.documentElement.setAttribute('data-theme', 'dark');
+    try {
+      const { container } = renderAt('/login');
+      await screen.findByRole('link', { name: /sign in with google/i });
+      expect(container.querySelector('.tour-stage img')?.getAttribute('src')).toBe(
+        '/tour/noteflow-tour-dark.jpg',
+      );
+      expect(container.querySelector('.tour-stage source')?.getAttribute('srcset')).toBe(
+        '/tour/noteflow-tour-vertical-dark.jpg',
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: /watch the 23-second tour/i }));
+      const video = container.querySelector('video');
+      expect(video?.getAttribute('src')).toBe('/tour/noteflow-tour-dark.mp4');
+
+      // Switching theme mid-tour swaps to the other render in the same player.
+      document.documentElement.setAttribute('data-theme', 'light');
+      await waitFor(() =>
+        expect(container.querySelector('video')?.getAttribute('src')).toBe(
+          '/tour/noteflow-tour.mp4',
+        ),
+      );
+      expect(container.querySelector('video')).toBe(video);
+    } finally {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  });
+
   it('"Remember me" is off by default and adds remember=1 to the sign-in link when ticked', async () => {
     const api = new FakeApi();
     api.signedIn = false;

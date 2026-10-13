@@ -477,3 +477,23 @@ Optional bonus work should only begin after all mandatory core and "Should have"
 - **Remaining:** Google OAuth app is in Testing (7-day refresh tokens, unverified-app warning;
   public verification needs a domain the owner controls); second-user isolation, email and push
   display were not re-tested live.
+
+## Landing page redesign with the tour video (13 Oct 2026)
+
+- Sign-in page recomposed (`features/auth/LoginPage.tsx`, `TourVideo.tsx`, `global.css`): headline,
+  support, one primary Google action and the consent line on the left; on the right one framed
+  object that is a still of the note and its extracted items and, when pressed, the 23-second tour
+  in the same box (no layout shift, MP4 requested only on press, portrait file at <=720px).
+  Assets and `noteflow-tour.vtt` captions are in `frontend/public/tour/`. The old static
+  "specimen" example and the duplicate legal-links row were removed. See DESIGN.md "Login".
+- Refinement: the frame now fills about 88% of the right panel (columns 0.86fr/1.14fr, tighter
+  showcase padding); the separate play bar and caption were replaced by a play control drawn on the
+  still's empty paper, and "Hide the tour" is overlaid top-right while playing.
+- Dark tour: `brag-output/composition-dark/` and `composition-vertical-dark/` are copies of the
+  light compositions with NoteFlow's dark token values; renders are
+  `frontend/public/tour/*-dark.{mp4,jpg}` (stills = frame at 8.5s, baked in as frame 0).
+  `TourVideo` picks by `activeTheme()` / `subscribeTheme()` in `lib/theme.ts` (the `data-theme`
+  choice, else the OS setting). Rendering needs ffmpeg/ffprobe on PATH (winget Gyan.FFmpeg).
+- Self-hosted on purpose: the CSP is `default-src 'self'`, so no header change was needed.
+- Source composition and renders live in `brag-output/` (Hyperframes, not part of the app build).
+  The Berlin answer and "Trip plans" note in the video are invented example content.
